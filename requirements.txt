@@ -1,0 +1,14 @@
+
+hopsworks
+joblib
+lime
+numpy
+openmeteo-requests
+pandas
+plotly
+python-dotenv
+requests
+scikit-learn
+shap
+tensorflow
+

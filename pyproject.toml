@@ -1,0 +1,9 @@
+[project]
+name = "aqi-predictor"
+version = "0.1.0"
+description = "Serverless AQI forecasting pipeline and dashboard scaffold."
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,33 @@
+name: AQI Pipelines
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+    - cron: "0 0 * * *"
+
+jobs:
+  feature-pipeline:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install -r requirements.txt
+      - run: python -m aqi_predictor.pipelines.feature_pipeline
+
+  training-pipeline:
+    if: github.event.schedule == '0 0 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install -r requirements.txt
+      - run: python -m aqi_predictor.pipelines.training_pipeline

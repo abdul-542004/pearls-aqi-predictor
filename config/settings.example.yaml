@@ -1,0 +1,20 @@
+project:
+  city: ""
+  latitude: ""
+  longitude: ""
+  forecast_horizon_days: 3
+
+data_sources:
+  weather_provider: "open_meteo"
+  pollutant_provider: "open_meteo"
+
+feature_store:
+  provider: "hopsworks"
+  feature_group: "aqi_features"
+
+model_registry:
+  provider: "hopsworks"
+  model_name: "aqi_forecaster"
+
+alerts:
+  hazardous_aqi_threshold: 300
