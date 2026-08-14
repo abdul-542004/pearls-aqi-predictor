@@ -2,7 +2,7 @@
 name = "aqi-predictor"
 version = "0.1.0"
 description = "Serverless AQI forecasting pipeline and dashboard scaffold."
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

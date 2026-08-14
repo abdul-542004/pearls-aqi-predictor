@@ -11,6 +11,11 @@ data_sources:
 feature_store:
   provider: "hopsworks"
   feature_group: "aqi_features"
+  feature_group_version: 1
+  primary_key: ["time"]
+  event_time: "time"
+  backfill_years: 3
+  backfill_chunk_days: 90
 
 model_registry:
   provider: "hopsworks"

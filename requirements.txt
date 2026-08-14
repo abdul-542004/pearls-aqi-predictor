@@ -1,7 +1,7 @@
-
-hopsworks
+hopsworks>=5.0.0
 joblib
 lime
+matplotlib
 numpy
 openmeteo-requests
 pandas
@@ -9,6 +9,10 @@ plotly
 python-dotenv
 requests
 scikit-learn
+seaborn
 shap
-tensorflow
+ipykernel
+# tensorflow  # Disabled due to protobuf version conflict with hopsworks (protobuf<5 vs protobuf>=6 on Py3.13). Use scikit-learn / xgboost / torch instead.
+xgboost
+pyarrow
 
