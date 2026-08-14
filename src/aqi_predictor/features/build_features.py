@@ -87,7 +87,10 @@ def _add_time_features(df):
 
 
 def _add_lag_features(df):
-    """Add lagged values for the target and PM2.5."""
+    """
+    Lag Features: Previous values of target and pollutants used as features.
+    Add lagged values for the target and PM2.5.
+    """
     df["us_aqi_lag_1h"] = df["us_aqi"].shift(1)
     df["us_aqi_lag_3h"] = df["us_aqi"].shift(3)
     df["us_aqi_lag_24h"] = df["us_aqi"].shift(24)
@@ -97,7 +100,10 @@ def _add_lag_features(df):
 
 
 def _add_rolling_features(df):
-    """Add shifted rolling means for AQI and key pollutants."""
+    """
+    Rolling Features: Moving averages of AQI and pollutants over fixed windows. Solves issue of capturing short-term spikes in AQI. 
+    Add shifted rolling means for AQI and key pollutants.
+    """
     # AQI rolling windows — shift(1) avoids leaking the current value
     shifted_aqi = df["us_aqi"].shift(1)
     df["aqi_rolling_3h"] = shifted_aqi.rolling(3).mean()

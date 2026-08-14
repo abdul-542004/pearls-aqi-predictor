@@ -43,7 +43,7 @@ def run():
     # rolling-24h and lag-24h features for the forecast window
     print(f"Fetching recent + forecast data for {city}...")
     raw = fetch_open_meteo_data(location, past_days=14, forecast_days=3)
-    print(f"  Fetched {len(raw)} rows ({raw['time'].min()} → {raw['time'].max()})")
+    print(f"  Fetched {len(raw)} rows ({raw['time'].min()} -> {raw['time'].max()})")
 
     # Engineer features
     print("Building features...")

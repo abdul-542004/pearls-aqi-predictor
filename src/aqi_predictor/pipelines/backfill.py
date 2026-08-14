@@ -59,7 +59,7 @@ def run(years=3):
         chunk_end = min(chunk_start + timedelta(days=CHUNK_DAYS), end)
         chunk_number += 1
 
-        print(f"\n--- Chunk {chunk_number}: {chunk_start} → {chunk_end} ---")
+        print(f"\n--- Chunk {chunk_number}: {chunk_start} -> {chunk_end} ---")
 
         # Fetch raw data for this chunk
         print("  Fetching data from Open-Meteo...")
