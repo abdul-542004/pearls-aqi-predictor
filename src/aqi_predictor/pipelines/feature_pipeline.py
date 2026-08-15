@@ -1,7 +1,7 @@
 """
 Feature pipeline — fetches recent data and upserts features into Hopsworks.
 
-Designed to run on a schedule (e.g., hourly via GitHub Actions).
+Designed to run on a schedule (e.g., hourly via GitHub Actions). # temporarily disable for now
 It fetches the last 14 days of actual data plus 3 days of forecast data
 from Open-Meteo, engineers features, and inserts them into the feature store.
 

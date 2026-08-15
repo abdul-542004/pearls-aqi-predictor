@@ -14,5 +14,6 @@ shap
 ipykernel
 # tensorflow  # Disabled due to protobuf version conflict with hopsworks (protobuf<5 vs protobuf>=6 on Py3.13). Use scikit-learn / xgboost / torch instead.
 xgboost
+torch
 pyarrow
 
