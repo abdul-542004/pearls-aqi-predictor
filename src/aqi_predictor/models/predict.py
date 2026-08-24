@@ -29,13 +29,28 @@ _POLLUTANT_ROLLING = {
     "carbon_monoxide": "co_rolling_6h",
 }
 
+# Weather columns available from forecast APIs (Open-Meteo)
+_WEATHER_FORECAST_COLS = [
+    "temperature_2m", "relative_humidity_2m", "precipitation",
+    "pressure_msl", "wind_speed_10m", "wind_direction_10m",
+]
+
+# Pollutant columns — NOT available from forecast APIs in production
+_POLLUTANT_COLS = [
+    "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
+    "sulphur_dioxide", "ozone",
+]
+
 
 def load_model(model_path):
     """Load a scikit-learn or XGBoost model from a .pkl file."""
     return joblib.load(model_path)
 
 
-def recursive_forecast(model, history_df, feature_cols, steps=72, forecast_weather_df=None):
+def recursive_forecast(
+    model, history_df, feature_cols, steps=72,
+    forecast_weather_df=None, include_forecast_pollutants=False,
+):
     """
     Generate a multi-step AQI forecast using recursive +1h predictions.
 
@@ -51,9 +66,13 @@ def recursive_forecast(model, history_df, feature_cols, steps=72, forecast_weath
     steps : int
         Number of hours to forecast (default 72 = 3 days).
     forecast_weather_df : pd.DataFrame, optional
-        Future weather/pollutant data from Open-Meteo forecast API.
-        If provided, columns like temperature_2m, pm2_5, etc. are
-        pulled from here instead of being held constant.
+        Future weather data indexed by datetime. If provided, weather
+        columns (temperature, humidity, wind, pressure, precipitation)
+        are pulled from here instead of being held constant.
+    include_forecast_pollutants : bool, optional
+        If True AND ``forecast_weather_df`` contains pollutant columns,
+        those are also updated from the forecast data. Default False
+        because future pollutant readings are not available in production.
 
     Returns
     -------
@@ -93,18 +112,18 @@ def recursive_forecast(model, history_df, feature_cols, steps=72, forecast_weath
         row["month_cos"] = np.cos(2 * np.pi * (next_time.month - 1) / 12)
         row["day_of_week"] = next_time.dayofweek
 
-        # -- Pull future weather/pollutants from forecast if available --
+        # -- Pull future weather from forecast if available --
         if forecast_weather_df is not None and next_time in forecast_weather_df.index:
             forecast_row = forecast_weather_df.loc[next_time]
-            weather_cols = [
-                "temperature_2m", "relative_humidity_2m", "precipitation",
-                "pressure_msl", "wind_speed_10m", "wind_direction_10m",
-                "pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
-                "sulphur_dioxide", "ozone",
-            ]
-            for col in weather_cols:
+            # Always update weather columns (available from forecast APIs)
+            for col in _WEATHER_FORECAST_COLS:
                 if col in forecast_row.index:
                     row[col] = forecast_row[col]
+            # Optionally update pollutant columns (NOT available in production)
+            if include_forecast_pollutants:
+                for col in _POLLUTANT_COLS:
+                    if col in forecast_row.index:
+                        row[col] = forecast_row[col]
 
         # -- Update AQI lag features --
         aqi_list = list(aqi_history)

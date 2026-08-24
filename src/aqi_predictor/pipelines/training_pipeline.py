@@ -144,8 +144,16 @@ def evaluate_recursive(model, test_df, feature_cols, horizons=(1, 6, 12, 24, 48,
 
     Picks sample points across the test set, runs recursive_forecast from
     each point, and measures accuracy at each horizon.
+
+    Future **weather** data from the test set is provided to the recursive
+    loop (simulating the Open-Meteo forecast available in production).
+    Future **pollutant** data is NOT provided — those are not available
+    at inference time.
     """
-    from aqi_predictor.models.predict import recursive_forecast
+    from aqi_predictor.models.predict import (
+        _WEATHER_FORECAST_COLS,
+        recursive_forecast,
+    )
 
     print("\n--- Recursive Forecast Evaluation -----------------")
     print(f"  Horizons: {horizons}")
@@ -155,6 +163,9 @@ def evaluate_recursive(model, test_df, feature_cols, horizons=(1, 6, 12, 24, 48,
     origins = range(24, len(test_df) - max_h, 72)
     print(f"  Evaluating from {len(list(origins))} forecast origins...")
 
+    # Weather columns present in the test set
+    available_weather = [c for c in _WEATHER_FORECAST_COLS if c in test_df.columns]
+
     # Collect actual vs predicted per horizon
     results_by_h = {h: {"actual": [], "predicted": []} for h in horizons}
 
@@ -162,8 +173,17 @@ def evaluate_recursive(model, test_df, feature_cols, horizons=(1, 6, 12, 24, 48,
         # Use 24 rows of history before the origin
         history = test_df.iloc[origin_idx - 24 : origin_idx + 1].copy()
 
-        # Run recursive forecast
-        forecast_df = recursive_forecast(model, history, feature_cols, steps=max_h)
+        # Build a weather-only forecast DataFrame from the test set's future
+        # rows.  This simulates having a real weather forecast API available
+        # in production (e.g. Open-Meteo 3-day forecast).
+        future = test_df.iloc[origin_idx + 1 : origin_idx + max_h + 1]
+        forecast_weather = future.set_index("time")[available_weather]
+
+        # Run recursive forecast with future weather
+        forecast_df = recursive_forecast(
+            model, history, feature_cols, steps=max_h,
+            forecast_weather_df=forecast_weather,
+        )
 
         # Compare at each horizon
         for h in horizons:
