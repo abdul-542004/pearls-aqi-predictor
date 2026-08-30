@@ -4,7 +4,7 @@ LSTM model for AQI prediction using PyTorch.
 Reshapes flat tabular features into sequences using a sliding window,
 then feeds them through a multi-layer LSTM followed by a linear head.
 
-The model expects *already-scaled* inputs — the training pipeline is
+The model expects *already-scaled* inputs -- the training pipeline is
 responsible for fitting the scaler and transforming data before calling
 ``train()``.
 """
@@ -14,19 +14,19 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
-# ── Defaults ────────────────────────────────────────────────────────
+# -- Defaults ----------------------------------------------------------------
 
-SEQUENCE_LENGTH = 24  # hours of history per sample
+SEQUENCE_LENGTH = 48  # hours of history per sample
 HIDDEN_SIZE = 128
 NUM_LAYERS = 2
-DROPOUT = 0.2
+DROPOUT = 0.3
 BATCH_SIZE = 64
-LEARNING_RATE = 1e-3
-MAX_EPOCHS = 100
-PATIENCE = 10  # early-stopping patience (epochs without val-loss improvement)
+LEARNING_RATE = 5e-4
+MAX_EPOCHS = 150
+PATIENCE = 15  # early-stopping patience (epochs without val-loss improvement)
 
 
-# ── Dataset ─────────────────────────────────────────────────────────
+# -- Dataset -----------------------------------------------------------------
 
 
 class AQISequenceDataset(Dataset):
@@ -46,7 +46,7 @@ class AQISequenceDataset(Dataset):
         return x_window, y_target
 
 
-# ── Network ─────────────────────────────────────────────────────────
+# -- Network -----------------------------------------------------------------
 
 
 class AQILstm(nn.Module):
@@ -62,7 +62,12 @@ class AQILstm(nn.Module):
             dropout=dropout if num_layers > 1 else 0.0,
         )
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_size, 1)
+        self.fc = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout * 0.5),
+            nn.Linear(hidden_size // 2, 1),
+        )
 
     def forward(self, x):
         # x: (batch, seq_len, features)
@@ -72,7 +77,7 @@ class AQILstm(nn.Module):
         return self.fc(out).squeeze(-1)  # (batch,)
 
 
-# ── Training ────────────────────────────────────────────────────────
+# -- Training ----------------------------------------------------------------
 
 
 def train(
@@ -113,9 +118,9 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"  LSTM device: {device}")
 
-    # Build data loaders
+    # Build data loaders -- shuffle=True for training to break temporal ordering bias
     train_ds = AQISequenceDataset(X_train, y_train, seq_len)
-    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=False)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
 
     val_dl = None
     if X_val is not None and y_val is not None:
@@ -125,15 +130,18 @@ def train(
     # Build model
     input_size = X_train.shape[1]
     model = AQILstm(input_size, hidden_size, num_layers, dropout).to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    criterion = nn.MSELoss()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
+    criterion = nn.HuberLoss(delta=10.0)  # More robust to outlier AQI spikes than MSE
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5, min_lr=1e-6
+    )
 
     best_val_loss = float("inf")
     best_state = None
     epochs_without_improvement = 0
 
     for epoch in range(1, max_epochs + 1):
-        # ── Train ──
+        # -- Train --
         model.train()
         train_loss = 0.0
         for xb, yb in train_dl:
@@ -142,11 +150,13 @@ def train(
             pred = model(xb)
             loss = criterion(pred, yb)
             loss.backward()
+            # Gradient clipping for training stability
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             train_loss += loss.item() * len(yb)
         train_loss /= len(train_ds)
 
-        # ── Validate ──
+        # -- Validate --
         if val_dl is not None:
             model.eval()
             val_loss = 0.0
@@ -157,8 +167,12 @@ def train(
                     val_loss += criterion(pred, yb).item() * len(yb)
             val_loss /= len(val_ds)
 
+            # Step the LR scheduler
+            scheduler.step(val_loss)
+
             if epoch % 10 == 0 or epoch == 1:
-                print(f"  Epoch {epoch:3d}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
+                current_lr = optimizer.param_groups[0]["lr"]
+                print(f"  Epoch {epoch:3d}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  lr={current_lr:.2e}")
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -181,7 +195,7 @@ def train(
     return model
 
 
-# ── Prediction helper ───────────────────────────────────────────────
+# -- Prediction helper -------------------------------------------------------
 
 
 def predict(model, X, seq_len=SEQUENCE_LENGTH):

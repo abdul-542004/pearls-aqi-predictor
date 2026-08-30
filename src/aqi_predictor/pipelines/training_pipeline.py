@@ -3,8 +3,8 @@ Training pipeline -- fetches features from Hopsworks, trains three models
 (Random Forest, XGBoost, LSTM) for +1h AQI prediction, evaluates them,
 and saves the best one.
 
-For multi-day forecasting, the best +1h model is used recursively
-via models/predict.py (recursive_forecast).
+For multi-horizon forecasting, use the direct_training pipeline instead,
+which trains separate models per horizon for better accuracy.
 
 Run:
     python src/aqi_predictor/pipelines/training_pipeline.py
@@ -38,7 +38,9 @@ from aqi_predictor.models.registry import save_model_local, upload_to_hopsworks
 TARGET = "us_aqi"
 TARGET_NEXT = "us_aqi_next_1h"
 
-# Columns to exclude from features
+# Columns to exclude from features.
+# Raw pollutant columns are now dropped by build_features() itself
+# when drop_raw_pollutants=True (the default).
 DROP_COLS = {"time", TARGET, TARGET_NEXT, "is_hazardous"}
 
 # Chronological split ratios
@@ -123,86 +125,26 @@ def _train_lstm(X_train, y_train, X_val, y_val, X_test, y_test):
     X_val_s = scaler.transform(X_val)
     X_test_s = scaler.transform(X_test)
 
-    model = lstm_model.train(X_train_s, y_train, X_val_s, y_val)
+    # Scale targets for better LSTM convergence
+    y_mean, y_std = y_train.mean(), y_train.std()
+    y_train_s = (y_train - y_mean) / y_std
+    y_val_s = (y_val - y_mean) / y_std
+
+    model = lstm_model.train(X_train_s, y_train_s, X_val_s, y_val_s)
 
     seq_len = lstm_model.SEQUENCE_LENGTH
-    preds = lstm_model.predict(model, X_test_s, seq_len)
+    preds_s = lstm_model.predict(model, X_test_s, seq_len)
+    # Inverse transform
+    preds = preds_s * y_std + y_mean
     y_test_aligned = y_test[seq_len:]
 
     metrics = eval_mod.evaluate_model(y_test_aligned, preds)
     eval_mod.print_metrics(metrics, "LSTM")
-    save_model_local(model, "lstm", metrics, ARTIFACTS_DIR, extra_files={"scaler": scaler})
+    save_model_local(model, "lstm", metrics, ARTIFACTS_DIR, extra_files={
+        "scaler": scaler,
+        "target_stats": {"mean": float(y_mean), "std": float(y_std)},
+    })
     return metrics
-
-
-# -- Recursive evaluation ----------------------------------------------------
-
-
-def evaluate_recursive(model, test_df, feature_cols, horizons=(1, 6, 12, 24, 48, 72)):
-    """
-    Evaluate the recursive prediction strategy on the test set.
-
-    Picks sample points across the test set, runs recursive_forecast from
-    each point, and measures accuracy at each horizon.
-
-    Future **weather** data from the test set is provided to the recursive
-    loop (simulating the Open-Meteo forecast available in production).
-    Future **pollutant** data is NOT provided — those are not available
-    at inference time.
-    """
-    from aqi_predictor.models.predict import (
-        _WEATHER_FORECAST_COLS,
-        recursive_forecast,
-    )
-
-    print("\n--- Recursive Forecast Evaluation -----------------")
-    print(f"  Horizons: {horizons}")
-
-    max_h = max(horizons)
-    # Sample every 72 rows to get independent forecast origins
-    origins = range(24, len(test_df) - max_h, 72)
-    print(f"  Evaluating from {len(list(origins))} forecast origins...")
-
-    # Weather columns present in the test set
-    available_weather = [c for c in _WEATHER_FORECAST_COLS if c in test_df.columns]
-
-    # Collect actual vs predicted per horizon
-    results_by_h = {h: {"actual": [], "predicted": []} for h in horizons}
-
-    for origin_idx in origins:
-        # Use 24 rows of history before the origin
-        history = test_df.iloc[origin_idx - 24 : origin_idx + 1].copy()
-
-        # Build a weather-only forecast DataFrame from the test set's future
-        # rows.  This simulates having a real weather forecast API available
-        # in production (e.g. Open-Meteo 3-day forecast).
-        future = test_df.iloc[origin_idx + 1 : origin_idx + max_h + 1]
-        forecast_weather = future.set_index("time")[available_weather]
-
-        # Run recursive forecast with future weather
-        forecast_df = recursive_forecast(
-            model, history, feature_cols, steps=max_h,
-            forecast_weather_df=forecast_weather,
-        )
-
-        # Compare at each horizon
-        for h in horizons:
-            actual_idx = origin_idx + h
-            if actual_idx < len(test_df):
-                actual_aqi = test_df.iloc[actual_idx]["us_aqi"]
-                pred_aqi = forecast_df.iloc[h - 1]["predicted_aqi"]
-                results_by_h[h]["actual"].append(actual_aqi)
-                results_by_h[h]["predicted"].append(pred_aqi)
-
-    # Compute metrics per horizon
-    recursive_metrics = {}
-    for h in horizons:
-        if results_by_h[h]["actual"]:
-            m = eval_mod.evaluate_model(results_by_h[h]["actual"], results_by_h[h]["predicted"])
-            recursive_metrics[f"+{h}h"] = m
-            print(f"    +{h:2d}h  RMSE={m['rmse']:.4f}  MAE={m['mae']:.4f}  R2={m['r2']:.4f}")
-
-    return recursive_metrics
 
 
 # -- Main --------------------------------------------------------------------
@@ -213,15 +155,27 @@ def run():
     # 1. Fetch data
     df = fetch_training_data()
 
-    # 2. Prepare +1h target
+    # 2. Re-engineer features if raw pollutant columns are present
+    raw_pollutant_cols = {"pm2_5", "pm10", "carbon_monoxide",
+                          "nitrogen_dioxide", "sulphur_dioxide", "ozone"}
+    has_raw_pollutants = bool(raw_pollutant_cols & set(df.columns))
+
+    if has_raw_pollutants:
+        print("\nDetected raw pollutant columns in feature store.")
+        print("Re-engineering features with leakage fix...")
+        from aqi_predictor.features.build_features import build_features
+        df = build_features(df, drop_raw_pollutants=True)
+        print(f"  After re-engineering: {len(df)} rows, {len(df.columns)} columns")
+
+    # 3. Prepare +1h target
     print("\nPreparing target (next-hour AQI)...")
     df = prepare_target(df)
 
-    # 3. Split
+    # 4. Split
     print("Splitting data...")
     train_df, val_df, test_df = split_data(df)
 
-    # 4. Feature columns
+    # 5. Feature columns
     feature_cols = sorted(set(df.columns) - DROP_COLS)
     print(f"  Using {len(feature_cols)} features")
 
@@ -229,30 +183,19 @@ def run():
     X_val, y_val = extract_xy(val_df, feature_cols)
     X_test, y_test = extract_xy(test_df, feature_cols)
 
-    # 5. Train all 3 models
+    # 6. Train all 3 models
     results = {}
     results["Random Forest"] = _train_rf(X_train, y_train, X_val, y_val, X_test, y_test)
     results["XGBoost"] = _train_xgb(X_train, y_train, X_val, y_val, X_test, y_test)
     results["LSTM"] = _train_lstm(X_train, y_train, X_val, y_val, X_test, y_test)
 
-    # 6. Compare
+    # 7. Compare
     comparison_df, best_name = eval_mod.compare_models(results)
-
-    # 7. Evaluate recursive forecasting with the best tree-based model
-    # (LSTM uses different interface, so we use the best of RF/XGBoost)
-    tree_models = {k: v for k, v in results.items() if k != "LSTM"}
-    best_tree = min(tree_models, key=lambda k: tree_models[k]["rmse"])
-    best_tree_path = ARTIFACTS_DIR / best_tree.lower().replace(" ", "_") / "model.pkl"
-
-    import joblib
-    best_model = joblib.load(best_tree_path)
-    recursive_metrics = evaluate_recursive(best_model, test_df, feature_cols)
 
     # 8. Save report
     report = {
         "best_model_1h": best_name,
         "direct_1h_metrics": results,
-        "recursive_metrics": recursive_metrics,
         "split": {"train": len(train_df), "val": len(val_df), "test": len(test_df)},
         "features": feature_cols,
     }
@@ -272,6 +215,8 @@ def run():
         print("  Models are still saved locally in artifacts/models/")
 
     print("\nTraining pipeline complete.")
+    print("\nTip: For multi-horizon forecasting, run the direct_training pipeline:")
+    print("  python src/aqi_predictor/pipelines/direct_training.py")
 
 
 if __name__ == "__main__":

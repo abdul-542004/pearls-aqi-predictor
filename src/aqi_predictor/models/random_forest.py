@@ -12,9 +12,11 @@ from sklearn.ensemble import RandomForestRegressor
 # Default hyperparameters — chosen for a reasonable balance between
 # accuracy and training speed on ~3 years of hourly data (~26 k rows).
 DEFAULT_PARAMS = {
-    "n_estimators": 200,
-    "max_depth": 20,
+    "n_estimators": 300,
+    "max_depth": 15,
     "min_samples_leaf": 5,
+    "min_samples_split": 10,
+    "max_features": 0.7,
     "n_jobs": -1,
     "random_state": 42,
 }
