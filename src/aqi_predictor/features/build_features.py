@@ -24,12 +24,12 @@ _RAW_POLLUTANT_COLS = [
 
 # Pollutants for which we compute lag and rolling features
 _LAG_POLLUTANTS = {
-    "pm2_5": [1, 3],
-    "pm10": [1, 3],
-    "carbon_monoxide": [1],
-    "nitrogen_dioxide": [1],
-    "sulphur_dioxide": [1],
-    "ozone": [1, 3],
+    "pm2_5": [1, 3, 24],
+    "pm10": [1, 3, 24],
+    "carbon_monoxide": [1, 24],
+    "nitrogen_dioxide": [1, 24],
+    "sulphur_dioxide": [1, 24],
+    "ozone": [1, 3, 24],
 }
 
 # Rolling window sizes for each pollutant

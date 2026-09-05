@@ -13,6 +13,8 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+import pandas as pd
+
 from dotenv import load_dotenv
 
 # Allow running as a script from the project root
@@ -61,19 +63,33 @@ def run(years=3):
 
         print(f"\n--- Chunk {chunk_number}: {chunk_start} -> {chunk_end} ---")
 
+        # Use a 4-day lookback buffer for chunks > 1 so lag/rolling features
+        # (up to 72h lag and 48h rolling) compute cleanly with zero data gaps
+        fetch_start = chunk_start if chunk_number == 1 else (chunk_start - timedelta(days=4))
+
         # Fetch raw data for this chunk
-        print("  Fetching data from Open-Meteo...")
+        print(f"  Fetching data from Open-Meteo ({fetch_start} -> {chunk_end})...")
         raw = fetch_open_meteo_data(
             location,
-            start_date=chunk_start,
+            start_date=fetch_start,
             end_date=chunk_end,
         )
-        print(f"  Fetched {len(raw)} rows")
+        print(f"  Fetched {len(raw)} raw rows")
 
-        # Engineer features
+        # Engineer features (v2 leakage-free features)
         print("  Building features...")
-        features = build_features(raw)
-        print(f"  Produced {len(features)} feature rows")
+        features = build_features(raw, drop_raw_pollutants=True)
+
+        # Discard the lookback buffer overlap for chunks > 1
+        if chunk_number > 1 and len(features) > 0:
+            cutoff = pd.to_datetime(chunk_start)
+            if features["time"].dt.tz is not None and cutoff.tz is None:
+                cutoff = cutoff.tz_localize(features["time"].dt.tz)
+            elif features["time"].dt.tz is None and cutoff.tz is not None:
+                cutoff = cutoff.tz_localize(None)
+            features = features[features["time"] >= cutoff].reset_index(drop=True)
+
+        print(f"  Produced {len(features)} feature rows ({len(features.columns)} columns)")
 
         # Insert into Hopsworks
         if len(features) > 0:
@@ -84,7 +100,7 @@ def run(years=3):
         # Move to next chunk
         chunk_start = chunk_end + timedelta(days=1)
 
-    print(f"\nBackfill complete. Processed {chunk_number} chunks.")
+    print(f"\nBackfill complete. Processed {chunk_number} chunks into '{fg.name}' v{fg.version}.")
 
 
 if __name__ == "__main__":

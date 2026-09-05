@@ -1,290 +1,350 @@
 [
   {
     "feature":"us_aqi_lag_1h",
-    "mean_abs_shap":9.0383987427
+    "mean_abs_shap":9.1752634048
   },
   {
     "feature":"pm2_5_rolling_24h",
-    "mean_abs_shap":3.4881701469
+    "mean_abs_shap":3.3245835304
   },
   {
     "feature":"ozone_rolling_6h",
-    "mean_abs_shap":1.0835199356
+    "mean_abs_shap":1.0670179129
   },
   {
     "feature":"aqi_change_1h",
-    "mean_abs_shap":0.6781535745
+    "mean_abs_shap":0.6291771531
   },
   {
     "feature":"aqi_rolling_3h",
-    "mean_abs_shap":0.4696900845
-  },
-  {
-    "feature":"pm2_5_rolling_12h",
-    "mean_abs_shap":0.2539900243
+    "mean_abs_shap":0.4469273686
   },
   {
     "feature":"pm2_5_lag_1h",
-    "mean_abs_shap":0.1798593998
+    "mean_abs_shap":0.2542116046
   },
   {
-    "feature":"aqi_change_3h",
-    "mean_abs_shap":0.1460306048
+    "feature":"pm2_5_rolling_12h",
+    "mean_abs_shap":0.2529266477
+  },
+  {
+    "feature":"pm2_5_lag_24h",
+    "mean_abs_shap":0.1872647554
   },
   {
     "feature":"ozone_lag_1h",
-    "mean_abs_shap":0.1329895407
+    "mean_abs_shap":0.1378430277
   },
   {
     "feature":"pm10_rolling_24h",
-    "mean_abs_shap":0.108941786
+    "mean_abs_shap":0.1276493222
+  },
+  {
+    "feature":"aqi_change_3h",
+    "mean_abs_shap":0.1155075803
   },
   {
     "feature":"pm10_lag_1h",
-    "mean_abs_shap":0.0720022917
+    "mean_abs_shap":0.0856499374
   },
   {
     "feature":"aqi_trend_6h",
-    "mean_abs_shap":0.067994982
-  },
-  {
-    "feature":"aqi_trend_24h",
-    "mean_abs_shap":0.065022938
-  },
-  {
-    "feature":"nitrogen_dioxide_lag_1h",
-    "mean_abs_shap":0.0586065985
-  },
-  {
-    "feature":"ozone_rolling_12h",
-    "mean_abs_shap":0.053396713
-  },
-  {
-    "feature":"us_aqi_lag_3h",
-    "mean_abs_shap":0.0421923436
-  },
-  {
-    "feature":"pm2_5_lag_3h",
-    "mean_abs_shap":0.0374737717
+    "mean_abs_shap":0.0620606244
   },
   {
     "feature":"ozone_lag_3h",
-    "mean_abs_shap":0.035745874
+    "mean_abs_shap":0.0524815172
   },
   {
-    "feature":"aqi_change_6h",
-    "mean_abs_shap":0.0305586513
+    "feature":"aqi_trend_24h",
+    "mean_abs_shap":0.0474665016
+  },
+  {
+    "feature":"pm10_lag_24h",
+    "mean_abs_shap":0.0461560115
+  },
+  {
+    "feature":"ozone_rolling_12h",
+    "mean_abs_shap":0.0431462452
+  },
+  {
+    "feature":"pm2_5_lag_3h",
+    "mean_abs_shap":0.041661121
   },
   {
     "feature":"pm10_lag_3h",
-    "mean_abs_shap":0.0291546807
+    "mean_abs_shap":0.0299444646
   },
   {
-    "feature":"aqi_change_24h",
-    "mean_abs_shap":0.0284564514
+    "feature":"nitrogen_dioxide_lag_1h",
+    "mean_abs_shap":0.0279558916
   },
   {
-    "feature":"hour_sin",
-    "mean_abs_shap":0.0268674735
-  },
-  {
-    "feature":"us_aqi_lag_6h",
-    "mean_abs_shap":0.0231616069
-  },
-  {
-    "feature":"hour_cos",
-    "mean_abs_shap":0.0204203185
+    "feature":"us_aqi_lag_3h",
+    "mean_abs_shap":0.0273411684
   },
   {
     "feature":"us_aqi_lag_12h",
-    "mean_abs_shap":0.0194483455
+    "mean_abs_shap":0.0271630604
   },
   {
-    "feature":"pm2_5_rolling_6h",
-    "mean_abs_shap":0.0193289537
-  },
-  {
-    "feature":"wind_speed_10m",
-    "mean_abs_shap":0.0185499247
-  },
-  {
-    "feature":"pm10_rolling_12h",
-    "mean_abs_shap":0.0163282175
-  },
-  {
-    "feature":"sulphur_dioxide_lag_1h",
-    "mean_abs_shap":0.0139007075
-  },
-  {
-    "feature":"forecast_wind_u_1h",
-    "mean_abs_shap":0.013606186
+    "feature":"aqi_change_6h",
+    "mean_abs_shap":0.0270100944
   },
   {
     "feature":"aqi_rolling_6h",
-    "mean_abs_shap":0.0126741026
+    "mean_abs_shap":0.0243055057
   },
   {
-    "feature":"aqi_max_24h",
-    "mean_abs_shap":0.0124805374
+    "feature":"aqi_change_24h",
+    "mean_abs_shap":0.0239201542
   },
   {
-    "feature":"aqi_std_6h",
-    "mean_abs_shap":0.0116130915
+    "feature":"pm2_5_rolling_6h",
+    "mean_abs_shap":0.0168347452
   },
   {
-    "feature":"temperature_2m",
-    "mean_abs_shap":0.0112316245
-  },
-  {
-    "feature":"pm10_rolling_6h",
-    "mean_abs_shap":0.0110759484
-  },
-  {
-    "feature":"sulphur_dioxide_rolling_6h",
-    "mean_abs_shap":0.0105488086
-  },
-  {
-    "feature":"nitrogen_dioxide_rolling_6h",
-    "mean_abs_shap":0.0102680344
-  },
-  {
-    "feature":"month_sin",
-    "mean_abs_shap":0.0098358868
-  },
-  {
-    "feature":"us_aqi_lag_72h",
-    "mean_abs_shap":0.0091498606
-  },
-  {
-    "feature":"temp_humidity",
-    "mean_abs_shap":0.0090303635
-  },
-  {
-    "feature":"carbon_monoxide_rolling_6h",
-    "mean_abs_shap":0.0083424747
-  },
-  {
-    "feature":"us_aqi_lag_48h",
-    "mean_abs_shap":0.0082980758
-  },
-  {
-    "feature":"forecast_relative_humidity_2m_1h",
-    "mean_abs_shap":0.007221594
-  },
-  {
-    "feature":"forecast_temperature_2m_1h",
-    "mean_abs_shap":0.0068070656
-  },
-  {
-    "feature":"forecast_temp_humidity_1h",
-    "mean_abs_shap":0.0068000471
-  },
-  {
-    "feature":"carbon_monoxide_lag_1h",
-    "mean_abs_shap":0.0066953856
-  },
-  {
-    "feature":"forecast_pressure_msl_1h",
-    "mean_abs_shap":0.0066903341
-  },
-  {
-    "feature":"forecast_wind_speed_10m_1h",
-    "mean_abs_shap":0.0063713575
-  },
-  {
-    "feature":"pressure_msl",
-    "mean_abs_shap":0.0061928732
-  },
-  {
-    "feature":"wind_u",
-    "mean_abs_shap":0.0056602987
-  },
-  {
-    "feature":"relative_humidity_2m",
-    "mean_abs_shap":0.005398382
+    "feature":"pm10_rolling_12h",
+    "mean_abs_shap":0.0163938813
   },
   {
     "feature":"aqi_rolling_24h",
-    "mean_abs_shap":0.0050482927
-  },
-  {
-    "feature":"aqi_rolling_48h",
-    "mean_abs_shap":0.0049443846
-  },
-  {
-    "feature":"aqi_std_24h",
-    "mean_abs_shap":0.0048799883
-  },
-  {
-    "feature":"aqi_ewm_12h",
-    "mean_abs_shap":0.0044412622
-  },
-  {
-    "feature":"forecast_wind_direction_10m_1h",
-    "mean_abs_shap":0.0043886011
-  },
-  {
-    "feature":"month_cos",
-    "mean_abs_shap":0.0041281404
-  },
-  {
-    "feature":"us_aqi_lag_24h",
-    "mean_abs_shap":0.0040894919
-  },
-  {
-    "feature":"co_rolling_6h",
-    "mean_abs_shap":0.0038830678
-  },
-  {
-    "feature":"forecast_wind_v_1h",
-    "mean_abs_shap":0.0036778459
-  },
-  {
-    "feature":"day_of_week",
-    "mean_abs_shap":0.0036704754
-  },
-  {
-    "feature":"aqi_rolling_12h",
-    "mean_abs_shap":0.003181929
-  },
-  {
-    "feature":"dow_cos",
-    "mean_abs_shap":0.0029862102
+    "mean_abs_shap":0.0157563053
   },
   {
     "feature":"aqi_min_24h",
-    "mean_abs_shap":0.0025207638
+    "mean_abs_shap":0.0156956427
+  },
+  {
+    "feature":"hour_cos",
+    "mean_abs_shap":0.0151739512
+  },
+  {
+    "feature":"sulphur_dioxide_lag_1h",
+    "mean_abs_shap":0.0146001223
+  },
+  {
+    "feature":"aqi_rolling_12h",
+    "mean_abs_shap":0.0142512163
+  },
+  {
+    "feature":"hour_sin",
+    "mean_abs_shap":0.0126382606
+  },
+  {
+    "feature":"nitrogen_dioxide_rolling_6h",
+    "mean_abs_shap":0.0118928021
+  },
+  {
+    "feature":"aqi_ewm_12h",
+    "mean_abs_shap":0.0113850217
+  },
+  {
+    "feature":"sulphur_dioxide_lag_24h",
+    "mean_abs_shap":0.0112988083
+  },
+  {
+    "feature":"us_aqi_lag_6h",
+    "mean_abs_shap":0.0111338142
+  },
+  {
+    "feature":"carbon_monoxide_lag_1h",
+    "mean_abs_shap":0.0107601006
+  },
+  {
+    "feature":"wind_speed_10m",
+    "mean_abs_shap":0.0103753069
+  },
+  {
+    "feature":"aqi_max_24h",
+    "mean_abs_shap":0.0103184618
+  },
+  {
+    "feature":"pm10_rolling_6h",
+    "mean_abs_shap":0.0101911183
+  },
+  {
+    "feature":"forecast_relative_humidity_2m_1h",
+    "mean_abs_shap":0.0089184558
+  },
+  {
+    "feature":"ozone_lag_24h",
+    "mean_abs_shap":0.0087945852
+  },
+  {
+    "feature":"carbon_monoxide_rolling_6h",
+    "mean_abs_shap":0.008685533
+  },
+  {
+    "feature":"nitrogen_dioxide_lag_24h",
+    "mean_abs_shap":0.0084711462
+  },
+  {
+    "feature":"sulphur_dioxide_rolling_6h",
+    "mean_abs_shap":0.0081560193
+  },
+  {
+    "feature":"delta_temp_humidity_1h",
+    "mean_abs_shap":0.006781654
+  },
+  {
+    "feature":"forecast_wind_u_1h",
+    "mean_abs_shap":0.006596758
+  },
+  {
+    "feature":"month_sin",
+    "mean_abs_shap":0.006108297
+  },
+  {
+    "feature":"carbon_monoxide_lag_24h",
+    "mean_abs_shap":0.0060892524
+  },
+  {
+    "feature":"delta_pressure_msl_1h",
+    "mean_abs_shap":0.0060859658
+  },
+  {
+    "feature":"co_rolling_6h",
+    "mean_abs_shap":0.0057450724
+  },
+  {
+    "feature":"us_aqi_lag_48h",
+    "mean_abs_shap":0.0054401984
+  },
+  {
+    "feature":"aqi_std_6h",
+    "mean_abs_shap":0.00541976
+  },
+  {
+    "feature":"aqi_rolling_48h",
+    "mean_abs_shap":0.0050154012
+  },
+  {
+    "feature":"relative_humidity_2m",
+    "mean_abs_shap":0.0049978509
+  },
+  {
+    "feature":"us_aqi_lag_72h",
+    "mean_abs_shap":0.0048511964
+  },
+  {
+    "feature":"temp_humidity",
+    "mean_abs_shap":0.0048352485
+  },
+  {
+    "feature":"forecast_wind_speed_10m_1h",
+    "mean_abs_shap":0.0047676722
+  },
+  {
+    "feature":"temperature_2m",
+    "mean_abs_shap":0.0047404361
+  },
+  {
+    "feature":"forecast_temp_humidity_1h",
+    "mean_abs_shap":0.0047367918
+  },
+  {
+    "feature":"forecast_wind_v_1h",
+    "mean_abs_shap":0.00450492
+  },
+  {
+    "feature":"delta_wind_direction_10m_1h",
+    "mean_abs_shap":0.0043650898
+  },
+  {
+    "feature":"delta_temperature_2m_1h",
+    "mean_abs_shap":0.00420989
+  },
+  {
+    "feature":"forecast_wind_direction_10m_1h",
+    "mean_abs_shap":0.0041460795
+  },
+  {
+    "feature":"delta_wind_u_1h",
+    "mean_abs_shap":0.0039163255
+  },
+  {
+    "feature":"forecast_pressure_msl_1h",
+    "mean_abs_shap":0.0038910406
+  },
+  {
+    "feature":"delta_relative_humidity_2m_1h",
+    "mean_abs_shap":0.0038813399
+  },
+  {
+    "feature":"forecast_temperature_2m_1h",
+    "mean_abs_shap":0.0037912412
+  },
+  {
+    "feature":"pressure_msl",
+    "mean_abs_shap":0.0037587988
+  },
+  {
+    "feature":"wind_u",
+    "mean_abs_shap":0.0037260004
+  },
+  {
+    "feature":"delta_wind_v_1h",
+    "mean_abs_shap":0.0036252269
+  },
+  {
+    "feature":"aqi_std_24h",
+    "mean_abs_shap":0.0034742819
   },
   {
     "feature":"wind_direction_10m",
-    "mean_abs_shap":0.0024678332
+    "mean_abs_shap":0.003272081
+  },
+  {
+    "feature":"day_of_week",
+    "mean_abs_shap":0.0030411505
+  },
+  {
+    "feature":"delta_wind_speed_10m_1h",
+    "mean_abs_shap":0.0028559731
+  },
+  {
+    "feature":"dow_cos",
+    "mean_abs_shap":0.0024748736
+  },
+  {
+    "feature":"us_aqi_lag_24h",
+    "mean_abs_shap":0.0023846659
   },
   {
     "feature":"wind_v",
-    "mean_abs_shap":0.0022809559
+    "mean_abs_shap":0.0018030987
   },
   {
     "feature":"dow_sin",
-    "mean_abs_shap":0.0019520249
+    "mean_abs_shap":0.0017123349
   },
   {
     "feature":"had_rain_24h",
-    "mean_abs_shap":0.001269929
+    "mean_abs_shap":0.0012068732
+  },
+  {
+    "feature":"month_cos",
+    "mean_abs_shap":0.0009622002
   },
   {
     "feature":"precip_last_6h",
-    "mean_abs_shap":0.0001538011
-  },
-  {
-    "feature":"precipitation",
-    "mean_abs_shap":0.0000999037
-  },
-  {
-    "feature":"forecast_precipitation_1h",
-    "mean_abs_shap":0.0000235735
+    "mean_abs_shap":0.0004129048
   },
   {
     "feature":"is_weekend",
-    "mean_abs_shap":0.0
+    "mean_abs_shap":0.0000920255
+  },
+  {
+    "feature":"delta_precipitation_1h",
+    "mean_abs_shap":0.0000890298
+  },
+  {
+    "feature":"precipitation",
+    "mean_abs_shap":0.0000743834
+  },
+  {
+    "feature":"forecast_precipitation_1h",
+    "mean_abs_shap":0.0000413957
   }
 ]

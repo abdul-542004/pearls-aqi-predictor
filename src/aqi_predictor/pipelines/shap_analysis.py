@@ -29,9 +29,10 @@ from aqi_predictor.features.hopsworks_utils import (
     get_feature_store,
     get_or_create_feature_group,
 )
-from aqi_predictor.pipelines.direct_training import (
+from aqi_predictor.pipelines.training_pipeline import (
     HORIZONS, TARGET, DROP_COLS, WEATHER_COLS,
     prepare_targets, split_data, add_forecast_weather_features,
+    get_horizon_feature_cols,
 )
 
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts" / "models"
@@ -43,10 +44,19 @@ SHAP_HORIZONS = [1, 24]
 
 def load_xgboost_model(horizon):
     """Load the trained XGBoost model for a specific horizon."""
-    model_path = ARTIFACTS_DIR / f"xgboost_{horizon}h" / "model.pkl"
+    model_dir = ARTIFACTS_DIR / f"xgboost_{horizon}h"
+    model_path = model_dir / "model.pkl"
     if not model_path.exists():
         raise FileNotFoundError(f"No model found at {model_path}")
-    return joblib.load(model_path)
+    model = joblib.load(model_path)
+    feat_path = model_dir / "feature_names.json"
+    if feat_path.exists():
+        try:
+            with open(feat_path, "r") as f:
+                model._expected_features = json.load(f)
+        except Exception:
+            pass
+    return model
 
 
 def run_shap_for_horizon(model, X_test, feature_cols, horizon, output_dir):
@@ -100,7 +110,7 @@ def run_shap_for_horizon(model, X_test, feature_cols, horizon, output_dir):
         "AQI Trend/Change": [f for f in feature_cols if any(f.startswith(p) for p in ["aqi_change", "aqi_trend"])],
         "Pollutant Lags/Rolling": [f for f in feature_cols if any(p in f for p in ["pm2_5", "pm10", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone", "co_rolling"])],
         "Weather (current)": [f for f in feature_cols if f in {"temperature_2m", "relative_humidity_2m", "precipitation", "pressure_msl", "wind_speed_10m", "wind_direction_10m", "wind_u", "wind_v", "temp_humidity", "precip_last_6h", "had_rain_24h"}],
-        "Weather (forecast)": [f for f in feature_cols if f.startswith("forecast_")],
+        "Weather (forecast/delta)": [f for f in feature_cols if f.startswith("forecast_") or f.startswith("delta_")],
         "Time Features": [f for f in feature_cols if any(f.startswith(p) for p in ["hour_", "month_", "dow_", "is_weekend"])],
     }
 
@@ -120,7 +130,7 @@ def run_shap_for_horizon(model, X_test, feature_cols, horizon, output_dir):
         if feat.startswith("us_aqi_lag"): return "#2196F3"  # Blue - AQI lags
         if any(feat.startswith(p) for p in ["aqi_rolling", "aqi_std", "aqi_min", "aqi_max", "aqi_ewm"]): return "#4CAF50"  # Green - AQI stats
         if any(feat.startswith(p) for p in ["aqi_change", "aqi_trend"]): return "#FF9800"  # Orange - trends
-        if feat.startswith("forecast_"): return "#9C27B0"  # Purple - forecast weather
+        if feat.startswith("forecast_") or feat.startswith("delta_"): return "#9C27B0"  # Purple - forecast weather & deltas
         if any(p in feat for p in ["pm2_5", "pm10", "carbon_monoxide", "nitrogen_dioxide", "sulphur_dioxide", "ozone"]): return "#F44336"  # Red - pollutants
         return "#607D8B"  # Grey - everything else
 
@@ -134,7 +144,7 @@ def run_shap_for_horizon(model, X_test, feature_cols, horizon, output_dir):
     ax.set_yticklabels(top_df["feature"].values, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel("Mean |SHAP value|")
-    ax.set_title(f"Feature Importance ({tag}) — Blue=AQI lags, Green=AQI stats, Orange=Trends, Purple=Forecast weather")
+    ax.set_title(f"Feature Importance ({tag}) — Blue=AQI lags, Green=AQI stats, Orange=Trends, Purple=Forecast weather & deltas")
     plt.tight_layout()
     bar_path = output_dir / f"shap_importance_{horizon}h.png"
     plt.savefig(bar_path, dpi=150)
@@ -194,7 +204,8 @@ def main():
 
         # Add forecast weather features for this horizon
         h_test, forecast_cols = add_forecast_weather_features(test_df, h)
-        feature_cols = sorted(base_feature_cols + forecast_cols)
+        all_cols = sorted(base_feature_cols + forecast_cols)
+        feature_cols = getattr(model, "_expected_features", get_horizon_feature_cols(all_cols, h))
 
         X_test = h_test[feature_cols].values.astype(np.float64)
         print(f"  Test set: {len(h_test)} rows, {len(feature_cols)} features")

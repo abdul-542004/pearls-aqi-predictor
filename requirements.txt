@@ -16,4 +16,4 @@ ipykernel
 xgboost
 torch
 pyarrow
-
+fastapi[standard]

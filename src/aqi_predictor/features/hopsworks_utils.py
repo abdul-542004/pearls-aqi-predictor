@@ -6,6 +6,7 @@ Handles connection, feature group creation, and data insertion.
 
 import os
 import tempfile
+import time
 
 import hopsworks
 
@@ -35,13 +36,16 @@ def get_feature_store():
 def get_or_create_feature_group(
     fs,
     name="aqi_features",
-    version=1,
-    description="Hourly AQI features for Karachi",
+    version=None,
+    description="Hourly AQI features for Karachi (v2: leakage-free direct multi-horizon features)",
     primary_key=None,
     event_time="time",
     time_travel_format="HUDI", # someone on discord suggested this 
 ):
     """Get an existing feature group or create a new one."""
+    if version is None:
+        version = int(os.environ.get("HOPSWORKS_FEATURE_GROUP_VERSION", "2"))
+
     if primary_key is None:
         primary_key = ["time"]
 
@@ -56,7 +60,27 @@ def get_or_create_feature_group(
     return fg
 
 
-def insert_features(fg, df):
-    """Insert a DataFrame into the feature group."""
-    fg.insert(df)
-    print(f"Inserted {len(df)} rows into feature group '{fg.name}' v{fg.version}")
+MAX_RETRIES = 3
+RETRY_BACKOFF = 30  # seconds
+
+
+def insert_features(fg, df, wait_for_job=False):
+    """Insert a DataFrame into the feature group with retry logic.
+
+    By default, does NOT wait for the server-side materialization job
+    to finish, which avoids connection timeouts during long backfills.
+    """
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            fg.insert(df, write_options={"wait_for_job": wait_for_job})
+            print(f"Inserted {len(df)} rows into feature group '{fg.name}' v{fg.version}")
+            return
+        except Exception as exc:
+            if attempt < MAX_RETRIES:
+                wait = RETRY_BACKOFF * attempt
+                print(f"  ⚠ Insert attempt {attempt} failed: {exc}")
+                print(f"    Retrying in {wait}s...")
+                time.sleep(wait)
+            else:
+                print(f"  ✗ Insert failed after {MAX_RETRIES} attempts")
+                raise

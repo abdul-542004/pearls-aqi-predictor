@@ -1,0 +1,47 @@
+# FastAPI Cloud Ignore File
+# Defines files and directories excluded/included when deploying with `fastapi deploy`
+
+# Version control and agent configs
+/.git/
+/.github/
+/.agents/
+
+# Virtual environments
+/venv/
+/.venv/
+/env/
+
+# Python cache & build outputs
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg-info/**
+/dist/
+/build/
+/.pytest_cache/
+
+# Development & exploratory artifacts at root
+/notebooks/
+/data/
+/images/
+/docs/
+/frontend/
+/tests/
+
+# Large model variants not used by current production API
+/artifacts/models_v1/
+/artifacts/models/random_forest_*/
+/artifacts/models/lstm_*/
+
+# Un-ignore production model artifacts and analytics reports
+!/artifacts/
+!/artifacts/models/
+!/artifacts/models/xgboost_*
+!/artifacts/models/xgboost_*/*
+!/artifacts/models/training_report.json
+!/reports/
+!/reports/*.json
+
+# Explicitly ensure all source code under /src is included
+!/src/**

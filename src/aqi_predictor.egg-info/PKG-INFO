@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: aqi-predictor
+Version: 0.1.0
+Summary: Serverless AQI forecasting pipeline and dashboard scaffold.
+Requires-Python: <3.14,>=3.10
+Requires-Dist: fastapi[standard]>=0.115.0
+Requires-Dist: hopsworks>=5.0.0
+Requires-Dist: joblib>=1.3.0
+Requires-Dist: lime>=0.2.0
+Requires-Dist: matplotlib>=3.8.0
+Requires-Dist: numpy>=1.26.0
+Requires-Dist: openmeteo-requests>=1.2.0
+Requires-Dist: pandas>=2.1.0
+Requires-Dist: plotly>=5.18.0
+Requires-Dist: pyarrow>=14.0.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: requests>=2.31.0
+Requires-Dist: scikit-learn>=1.3.0
+Requires-Dist: seaborn>=0.13.0
+Requires-Dist: shap>=0.44.0
+Requires-Dist: torch>=2.1.0
+Requires-Dist: xgboost>=2.0.0

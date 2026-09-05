@@ -60,6 +60,7 @@ def load_direct_models(artifacts_dir, model_type="xgboost"):
     dict[int, object]
         Mapping of {horizon_hours: fitted_model}.
     """
+    import json
     artifacts_dir = Path(artifacts_dir)
     models = {}
 
@@ -67,7 +68,16 @@ def load_direct_models(artifacts_dir, model_type="xgboost"):
         model_dir = artifacts_dir / f"{model_type}_{h}h"
         model_path = model_dir / "model.pkl"
         if model_path.exists():
-            models[h] = joblib.load(model_path)
+            model = joblib.load(model_path)
+            # Load feature names if saved alongside the model
+            feat_path = model_dir / "feature_names.json"
+            if feat_path.exists():
+                try:
+                    with open(feat_path, "r") as f:
+                        model._expected_features = json.load(f)
+                except Exception:
+                    pass
+            models[h] = model
             print(f"  Loaded {model_type} +{h}h model from {model_path}")
         else:
             print(f"  Warning: No model found at {model_path}")
@@ -109,31 +119,47 @@ def direct_forecast(models, current_features, feature_cols, max_hours=72,
             # Build the feature vector including forecast weather for this horizon
             row = dict(current_features) if not isinstance(current_features, dict) else current_features.copy()
 
-            # Add forecast weather features if available
+            # Add forecast weather features and deltas if available
             if forecast_weather_df is not None and current_time is not None:
                 target_time = current_time + pd.Timedelta(hours=h)
                 if target_time in forecast_weather_df.index:
                     fw = forecast_weather_df.loc[target_time]
                     for col in _WEATHER_FORECAST_COLS:
                         if col in fw.index:
-                            row[f"forecast_{col}_{h}h"] = fw[col]
+                            fc_val = fw[col]
+                            row[f"forecast_{col}_{h}h"] = fc_val
+                            if col in row:
+                                row[f"delta_{col}_{h}h"] = fc_val - row[col]
+
                     # Derived forecast features
                     if "wind_speed_10m" in fw.index and "wind_direction_10m" in fw.index:
                         wd_rad = np.deg2rad(fw["wind_direction_10m"])
-                        row[f"forecast_wind_u_{h}h"] = fw["wind_speed_10m"] * np.sin(wd_rad)
-                        row[f"forecast_wind_v_{h}h"] = fw["wind_speed_10m"] * np.cos(wd_rad)
+                        u_val = fw["wind_speed_10m"] * np.sin(wd_rad)
+                        v_val = fw["wind_speed_10m"] * np.cos(wd_rad)
+                        row[f"forecast_wind_u_{h}h"] = u_val
+                        row[f"forecast_wind_v_{h}h"] = v_val
+                        if "wind_u" in row:
+                            row[f"delta_wind_u_{h}h"] = u_val - row["wind_u"]
+                        if "wind_v" in row:
+                            row[f"delta_wind_v_{h}h"] = v_val - row["wind_v"]
+
                     if "temperature_2m" in fw.index and "relative_humidity_2m" in fw.index:
-                        row[f"forecast_temp_humidity_{h}h"] = (
+                        th_val = (
                             fw["temperature_2m"] * fw["relative_humidity_2m"] / 100.0
                         )
+                        row[f"forecast_temp_humidity_{h}h"] = th_val
+                        if "temp_humidity" in row:
+                            row[f"delta_temp_humidity_{h}h"] = th_val - row["temp_humidity"]
 
-            # Get the feature columns this model expects
-            # (base features + forecast features for this specific horizon)
-            model_feature_cols = [c for c in feature_cols if not c.startswith("forecast_")]
-            forecast_col_names = [c for c in row.keys() if c.startswith(f"forecast_") and c.endswith(f"_{h}h")]
-            all_cols = sorted(model_feature_cols + forecast_col_names)
+            # Get the exact feature columns this specific horizon model expects
+            if hasattr(model, "_expected_features") and model._expected_features:
+                model_cols = model._expected_features
+            else:
+                model_feature_cols = [c for c in feature_cols if not c.startswith("forecast_") and not c.startswith("delta_")]
+                horizon_extra_cols = [c for c in row.keys() if (c.startswith("forecast_") or c.startswith("delta_")) and c.endswith(f"_{h}h")]
+                model_cols = sorted(model_feature_cols + horizon_extra_cols)
 
-            X = np.array([row.get(col, 0.0) for col in all_cols],
+            X = np.array([row.get(col, 0.0) for col in model_cols],
                          dtype=np.float64).reshape(1, -1)
             pred = float(model.predict(X)[0])
             direct_preds[h] = max(0.0, min(500.0, pred))  # Clamp to AQI range
@@ -173,7 +199,8 @@ def direct_forecast(models, current_features, feature_cols, max_hours=72,
     return pd.DataFrame(predictions)
 
 
-def direct_forecast_with_time(models, history_df, feature_cols, max_hours=72):
+def direct_forecast_with_time(models, history_df, feature_cols, max_hours=72,
+                              forecast_weather_df=None):
     """
     Generate a time-indexed forecast using direct models.
 
@@ -190,6 +217,8 @@ def direct_forecast_with_time(models, history_df, feature_cols, max_hours=72):
         Feature column names the models expect.
     max_hours : int
         Maximum forecast horizon.
+    forecast_weather_df : pd.DataFrame, optional
+        Future weather data indexed by datetime.
 
     Returns
     -------
@@ -199,7 +228,10 @@ def direct_forecast_with_time(models, history_df, feature_cols, max_hours=72):
     last_row = history_df.iloc[-1]
     last_time = pd.to_datetime(last_row["time"])
 
-    forecast_df = direct_forecast(models, last_row, feature_cols, max_hours)
+    forecast_df = direct_forecast(
+        models, last_row, feature_cols, max_hours=max_hours,
+        forecast_weather_df=forecast_weather_df
+    )
     forecast_df["time"] = [last_time + pd.Timedelta(hours=h)
                            for h in forecast_df["hours_ahead"]]
     return forecast_df[["time", "hours_ahead", "predicted_aqi"]]

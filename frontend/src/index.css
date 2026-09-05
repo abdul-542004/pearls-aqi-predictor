@@ -1,0 +1,213 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.75rem;
+
+  /* Emil Kowalski Animation Scale & Easings */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-press: 140ms;
+  --duration-fast: 160ms;
+  --duration-normal: 220ms;
+  --duration-smooth: 280ms;
+
+  /* Typography */
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: "Space Grotesk", "Plus Jakarta Sans", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Precision Dark Mode Palette */
+  --background: oklch(0.12 0.015 255);
+  --foreground: oklch(0.97 0.005 255);
+
+  --card: oklch(0.16 0.018 255 / 0.85);
+  --card-foreground: oklch(0.97 0.005 255);
+  --card-border: oklch(0.28 0.02 255 / 0.6);
+
+  --popover: oklch(0.15 0.018 255 / 0.95);
+  --popover-foreground: oklch(0.97 0.005 255);
+
+  --primary: oklch(0.72 0.14 210);
+  --primary-foreground: oklch(0.12 0.015 255);
+
+  --secondary: oklch(0.22 0.02 255);
+  --secondary-foreground: oklch(0.92 0.01 255);
+
+  --muted: oklch(0.19 0.015 255);
+  --muted-foreground: oklch(0.65 0.02 255);
+
+  --accent: oklch(0.24 0.025 255);
+  --accent-foreground: oklch(0.96 0.01 255);
+
+  --destructive: oklch(0.58 0.22 25);
+  --destructive-foreground: oklch(0.98 0.005 255);
+
+  --border: oklch(0.25 0.018 255 / 0.7);
+  --input: oklch(0.24 0.018 255 / 0.8);
+  --ring: oklch(0.72 0.14 210);
+
+  /* Chart Colors */
+  --chart-1: oklch(0.72 0.14 210);
+  --chart-2: oklch(0.75 0.16 150);
+  --chart-3: oklch(0.75 0.15 50);
+  --chart-4: oklch(0.7 0.16 300);
+  --chart-5: oklch(0.65 0.18 25);
+
+  /* AQI Severity Tones */
+  --aqi-good: #10b981;
+  --aqi-moderate: #f59e0b;
+  --aqi-unhealthy-sensitive: #f97316;
+  --aqi-unhealthy: #ef4444;
+  --aqi-very-unhealthy: #8b5cf6;
+  --aqi-hazardous: #7f1d1d;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.22 0.06 220 / 0.2), transparent 70%),
+    radial-gradient(circle at 10% 20%, oklch(0.18 0.04 260 / 0.15), transparent 40%),
+    radial-gradient(circle at 90% 80%, oklch(0.2 0.05 180 / 0.1), transparent 50%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+h1, h2, h3, .font-heading {
+  font-family: var(--font-heading);
+}
+
+.font-mono, code, .tabular-nums {
+  font-family: var(--font-mono);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+/* Emil Kowalski Button Press & Micro-Interactions */
+button, [role="button"], .btn-interactive {
+  transition: transform var(--duration-press) var(--ease-out), 
+              background-color var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              opacity var(--duration-fast) var(--ease-out);
+  cursor: pointer;
+}
+
+button:active:not(:disabled), 
+[role="button"]:active:not([aria-disabled="true"]), 
+.btn-interactive:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Glassmorphism Surface Utilities */
+.glass-panel {
+  background: var(--card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+.glass-card {
+  background: color-mix(in srgb, var(--card) 92%, #ffffff 3%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.28 0.02 255 / 0.7);
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.35), inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.glass-card:hover {
+  border-color: oklch(0.36 0.03 255 / 0.85);
+  box-shadow: 0 6px 24px -2px rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Smooth Entrance Keyframes (Never scale from 0 - starts from scale 0.96) */
+@keyframes cardEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-entrance {
+  animation: cardEntrance var(--duration-smooth) var(--ease-out) forwards;
+}
+
+/* Live Telemetry Radar Pulse */
+@keyframes beaconPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(2, 132, 199, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(2, 132, 199, 0);
+  }
+}
+
+.beacon-pulse {
+  animation: beaconPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Reduced Motion Safety Gate */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  button:active, [role="button"]:active {
+    transform: none !important;
+  }
+  .glass-card:hover {
+    transform: none !important;
+  }
+}

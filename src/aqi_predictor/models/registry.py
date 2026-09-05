@@ -46,9 +46,15 @@ def save_model_local(model, model_name, metrics, artifacts_dir, extra_files=None
     # Save model
     _save_model_file(model, model_dir)
 
-    # Save extra artefacts (e.g. scaler for LSTM)
+    # Save extra artefacts (e.g. scaler for LSTM, feature_names)
     if extra_files:
         for name, obj in extra_files.items():
+            if isinstance(obj, (list, dict)):
+                try:
+                    with open(model_dir / f"{name}.json", "w") as f:
+                        json.dump(obj, f, indent=2)
+                except Exception:
+                    pass
             joblib.dump(obj, model_dir / f"{name}.pkl")
 
     # Save metrics
