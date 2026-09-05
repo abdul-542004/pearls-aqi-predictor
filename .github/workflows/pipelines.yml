@@ -2,33 +2,87 @@ name: AQI Pipelines
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "0 0 * * *" # Disabled automatic schedule to save GitHub Actions minutes. Uncomment when ready for production.
+    inputs:
+      run_training:
+        description: "Also run the training pipeline after features?"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+  schedule:
+    # Feature pipeline: runs every hour at minute 0
+    - cron: "0 * * * *"
+    # Training pipeline: runs once daily at 02:00 UTC
+    - cron: "0 2 * * *"
+
+# Shared environment variables for all jobs (from GitHub Secrets + defaults)
+env:
+  PYTHONPATH: src
+  HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
+  HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+  HOPSWORKS_FEATURE_GROUP_VERSION: ${{ secrets.HOPSWORKS_FEATURE_GROUP_VERSION || '2' }}
+  AQI_CITY: ${{ secrets.AQI_CITY || 'Karachi' }}
+  AQI_LATITUDE: ${{ secrets.AQI_LATITUDE || '24.8608' }}
+  AQI_LONGITUDE: ${{ secrets.AQI_LONGITUDE || '67.0104' }}
 
 jobs:
+  # ── Feature Pipeline ─────────────────────────────────────────────
+  # Runs on every trigger (hourly cron, daily cron, and manual dispatch).
+  # Fetches 14 days of recent weather + AQ data plus 3-day forecasts,
+  # engineers features, and upserts them into the Hopsworks feature store.
   feature-pipeline:
     runs-on: ubuntu-latest
-    env:
-      PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
-      - run: pip install -r requirements.txt
-      - run: python -m aqi_predictor.pipelines.feature_pipeline
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run feature pipeline
+        run: python -m aqi_predictor.pipelines.feature_pipeline
+
+  # ── Training Pipeline ────────────────────────────────────────────
+  # Runs ONLY on:
+  #   1. The daily 02:00 UTC cron schedule
+  #   2. Manual dispatch when run_training is set to "true"
+  #
+  # Always waits for the feature pipeline to finish first so the
+  # feature store has the latest data before training begins.
   training-pipeline:
+    needs: feature-pipeline
+    if: |
+      github.event.schedule == '0 2 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_training == 'true')
     runs-on: ubuntu-latest
-    env:
-      PYTHONPATH: src
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
-      - run: pip install -r requirements.txt
-      - run: python -m aqi_predictor.pipelines.training_pipeline
 
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run training pipeline
+        run: python -m aqi_predictor.pipelines.training_pipeline
+
+      # Commit updated model artifacts back to the repo.
+      # This triggers FastAPI Cloud to auto-redeploy with fresh models.
+      - name: Commit and push trained models
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add artifacts/models/ reports/
+          git diff --staged --quiet || git commit -m "chore: update trained models [skip ci]"
+          git push

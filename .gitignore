@@ -4,11 +4,10 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-artifacts/
 data/raw/*
 data/processed/*
-artifacts/models/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
-!artifacts/models/.gitkeep
+# Keep old/scratch artifacts ignored, but track active models
+artifacts/models_v1/
 .agents/
