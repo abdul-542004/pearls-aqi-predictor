@@ -47,30 +47,30 @@ Rather than relying on naive persistence heuristics or error-accumulating recurs
 
 ```mermaid
 flowchart TD
-    subgraph Data Layer ["Data Ingestion"]
-        OM[Open-Meteo API<br/>Weather + AQI Observations + 3-Day Forecasts]
+    subgraph DataLayer ["Data Ingestion"]
+        OM["Open-Meteo API<br/>Weather + AQI Observations + 3-Day Forecasts"]
     end
 
-    subgraph Feature Store Layer ["Hopsworks Cloud"]
-        FP[Feature Pipeline<br/>Hourly Cron: 0 * * * *] -->|Engineered Features| FG[Hopsworks Feature Group<br/>aqi_features v2 (Hudi)]
+    subgraph FeatureStoreLayer ["Hopsworks Cloud"]
+        FP["Feature Pipeline<br/>Hourly Cron: 0 * * * *"] -->|Engineered Features| FG["Hopsworks Feature Group<br/>aqi_features v2 (Hudi)"]
     end
 
-    subgraph Modeling Layer ["Training & Explainability"]
-        TP[Training Pipeline<br/>Daily Cron: 0 2 * * *] -->|Pull 3y Dataset| FG
-        TP -->|Train Direct Models| MD[XGBoost / RF / LSTM<br/>+1h, +6h, +12h, +24h, +48h, +72h]
-        MD --> AR[Model Artifacts<br/>artifacts/models/]
-        SH[SHAP Pipeline<br/>Staleness-Aware Refresh] -->|Explainability Plots & JSON| RP[Reports Directory<br/>reports/]
+    subgraph ModelingLayer ["Training & Explainability"]
+        TP["Training Pipeline<br/>Daily Cron: 0 2 * * *"] -->|Pull 3y Dataset| FG
+        TP -->|Train Direct Models| MD["XGBoost / RF / LSTM<br/>+1h, +6h, +12h, +24h, +48h, +72h"]
+        MD --> AR["Model Artifacts<br/>artifacts/models/"]
+        SH["SHAP Pipeline<br/>Staleness-Aware Refresh"] -->|Explainability Plots & JSON| RP["Reports Directory<br/>reports/"]
     end
 
-    subgraph CI_CD ["Automation (GitHub Actions)"]
-        GA[GitHub Actions Runner] --> FP
+    subgraph CICD ["Automation (GitHub Actions)"]
+        GA["GitHub Actions Runner"] --> FP
         GA --> TP
-        TP -->|git commit & push| GH[GitHub Repository]
+        TP -->|git commit & push| GH["GitHub Repository"]
     end
 
-    subgraph Serving Layer ["Inference & Production"]
-        GH -->|Auto Rebuild| FC[FastAPI Cloud Backend<br/>REST API with 5-min TTL Cache]
-        FC --> FE[React + TypeScript Dashboard<br/>Vercel Frontend]
+    subgraph ServingLayer ["Inference & Production"]
+        GH -->|Auto Rebuild| FC["FastAPI Cloud Backend<br/>REST API with 5-min TTL Cache"]
+        FC --> FE["React + TypeScript Dashboard<br/>Vercel Frontend"]
     end
 
     OM --> FP
