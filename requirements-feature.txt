@@ -1,0 +1,9 @@
+# Minimal dependencies for the hourly feature pipeline (CI/CD).
+# Excludes torch, xgboost, shap, and other heavy training-only packages
+# to stay within GitHub Actions runner disk limits.
+hopsworks[python]>=5.0.0
+numpy
+pandas
+python-dotenv
+requests
+pyarrow

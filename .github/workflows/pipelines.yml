@@ -43,7 +43,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-feature.txt
 
       - name: Run feature pipeline
         run: python -m aqi_predictor.pipelines.feature_pipeline
@@ -71,8 +71,10 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install dependencies (CPU-only torch to save disk)
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
 
       - name: Run training pipeline
         run: python -m aqi_predictor.pipelines.training_pipeline
