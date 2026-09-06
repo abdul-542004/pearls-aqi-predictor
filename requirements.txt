@@ -1,4 +1,4 @@
-hopsworks>=5.0.0
+hopsworks[python]>=5.0.0
 joblib
 lime
 matplotlib
