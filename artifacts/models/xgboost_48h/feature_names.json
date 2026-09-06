@@ -12,8 +12,6 @@
   "aqi_trend_24h",
   "carbon_monoxide_lag_24h",
   "carbon_monoxide_rolling_6h",
-  "co_rolling_6h",
-  "day_of_week",
   "delta_precipitation_48h",
   "delta_pressure_msl_48h",
   "delta_relative_humidity_2m_48h",
