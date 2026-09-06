@@ -39,8 +39,8 @@ Rather than relying on naive persistence heuristics or error-accumulating recurs
 
 - **Live Backend API**: [`https://aqi-predictor-ed96dd41.fastapicloud.dev`](https://aqi-predictor-ed96dd41.fastapicloud.dev)
 - **API Documentation**: [`/docs`](https://aqi-predictor-ed96dd41.fastapicloud.dev/docs) (Swagger UI)
-- **Interactive Dashboard**: Deployed on Vercel with real-time EPA categorization, interactive charts, and multi-horizon SHAP inspection.
-
+- **Interactive Dashboard**: [`https://pearls-aqi-predictor-three.vercel.app/`](https://pearls-aqi-predictor-three.vercel.app/)
+- **Project Report**: [`reports/report.pdf`](./reports/report.pdf)
 ---
 
 ## 🏗 System Architecture
