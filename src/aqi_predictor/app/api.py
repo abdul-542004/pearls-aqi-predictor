@@ -49,6 +49,7 @@ state: Dict[str, Any] = {
     "models": {},
     "feature_cols": [],
     "training_report": {},
+    "shap_importance": {},
     "shap_importance_1h": {},
     "shap_importance_24h": {},
     "cache": {
@@ -200,22 +201,23 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"  Warning: Could not load training report: {e}")
 
-    # 3. Load SHAP importance reports if available
-    shap_1h = REPORTS_DIR / "shap_importance_1h.json"
-    if shap_1h.exists():
-        try:
-            with open(shap_1h, "r") as f:
-                state["shap_importance_1h"] = json.load(f)
-        except Exception:
-            pass
-
-    shap_24h = REPORTS_DIR / "shap_importance_24h.json"
-    if shap_24h.exists():
-        try:
-            with open(shap_24h, "r") as f:
-                state["shap_importance_24h"] = json.load(f)
-        except Exception:
-            pass
+    # 3. Load SHAP importance reports for all horizons
+    shap_dict = {}
+    for h in [1, 6, 12, 24, 48, 72]:
+        shap_file = REPORTS_DIR / f"shap_importance_{h}h.json"
+        if shap_file.exists():
+            try:
+                with open(shap_file, "r") as f:
+                    shap_data = json.load(f)
+                    shap_dict[f"{h}h_model"] = shap_data
+                    state[f"shap_importance_{h}h"] = shap_data
+            except Exception as e:
+                print(f"  Notice: Could not load SHAP report for +{h}h: {e}")
+    state["shap_importance"] = shap_dict
+    if "1h_model" in shap_dict:
+        state["shap_importance_1h"] = shap_dict["1h_model"]
+    if "24h_model" in shap_dict:
+        state["shap_importance_24h"] = shap_dict["24h_model"]
 
     # 4. Pre-fetch initial data
     try:
@@ -610,16 +612,18 @@ def get_model_analytics():
     Get model evaluation metrics (RMSE, MAE, R²) and SHAP feature importance.
     """
     report = state.get("training_report", {})
-    shap_1h = state.get("shap_importance_1h", {})
-    shap_24h = state.get("shap_importance_24h", {})
+    shap_dict = state.get("shap_importance", {})
+    if not shap_dict:
+        # Fallback if shap_importance dict not populated
+        shap_dict = {
+            "1h_model": state.get("shap_importance_1h", {}),
+            "24h_model": state.get("shap_importance_24h", {}),
+        }
 
     return {
         "status": "available" if report else "not_found",
         "training_report": report,
-        "shap_importance": {
-            "1h_model": shap_1h,
-            "24h_model": shap_24h,
-        },
+        "shap_importance": shap_dict,
         "model_architecture": {
             "strategy": "Direct Multi-Horizon Forecasting",
             "horizons": [1, 6, 12, 24, 48, 72],

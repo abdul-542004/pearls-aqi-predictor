@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
@@ -45,19 +46,47 @@ export function Analytics({ data, loading }: Props) {
     )
   }
 
+  const [selectedHorizon, setSelectedHorizon] = useState<number>(1)
+
   const report = data.training_report
-  const shap1h = data.shap_importance["1h_model"] || []
-  const shap24h = data.shap_importance["24h_model"] || []
   const horizons = report.results_per_horizon || {}
+  const availableHorizons = [1, 6, 12, 24, 48, 72]
 
-  const shapData1h = shap1h.slice(0, 12).map((f) => ({
-    name: formatFeatureName(f.feature),
-    rawName: f.feature,
-    value: Math.round(f.mean_abs_shap * 1000) / 1000,
-    category: getFeatureCategory(f.feature),
-  }))
+  const HORIZON_META: Record<number, { label: string; tag: string; description: string }> = {
+    1: {
+      label: "+1h",
+      tag: "Immediate Persistence",
+      description: "Near-term prediction is governed by immediate air mass inertia and short rolling averages (e.g. pm2_5_rolling_1h, us_aqi_lag_1h), capturing local particulate stagnation.",
+    },
+    6: {
+      label: "+6h",
+      tag: "Short-Range Dispersion",
+      description: "Atmospheric boundary layer shifts, 6-hour particulate rolling trajectories, and commute emission transitions dominate as initial lag persistence begins to decay.",
+    },
+    12: {
+      label: "+12h",
+      tag: "Intra-Day Transition",
+      description: "Governed by 12h rolling pollution baselines, diurnal solar radiation cycles, and emerging wind direction/speed changes between daytime commute and evening inversion.",
+    },
+    24: {
+      label: "+24h",
+      tag: "Diurnal Cycle",
+      description: "Over a full diurnal cycle, future numerical weather forecasts (forecast temp/humidity/wind), month/hour seasonality, and 24h lag cycles surpass direct short-term persistence.",
+    },
+    48: {
+      label: "+48h",
+      tag: "2-Day Synoptic Weather",
+      description: "Two-day forecasts rely extensively on synoptic weather forecasts (pressure, wind velocity, temperature-humidity index) and seasonal progression, with weather forcing accounting for >36% of model importance.",
+    },
+    72: {
+      label: "+72h",
+      tag: "3-Day Meteorological Forcing",
+      description: "At the 3-day horizon, meteorological forecasts and seasonal trends govern over 70% of explainability. Direct autoregressive lag memory has largely decayed, making numerical weather prediction the primary driver.",
+    },
+  }
 
-  const shapData24h = shap24h.slice(0, 12).map((f) => ({
+  const currentRawShap = data.shap_importance[`${selectedHorizon}h_model`] || []
+  const currentShapData = currentRawShap.slice(0, 15).map((f) => ({
     name: formatFeatureName(f.feature),
     rawName: f.feature,
     value: Math.round(f.mean_abs_shap * 1000) / 1000,
@@ -111,11 +140,8 @@ export function Analytics({ data, loading }: Props) {
             <TabsTrigger value="metrics" className="rounded-lg text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Evaluation Metrics
             </TabsTrigger>
-            <TabsTrigger value="shap-1h" className="rounded-lg text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              +1h SHAP Drivers
-            </TabsTrigger>
-            <TabsTrigger value="shap-24h" className="rounded-lg text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              +24h SHAP Drivers
+            <TabsTrigger value="shap" className="rounded-lg text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              SHAP Drivers (All Horizons)
             </TabsTrigger>
             <TabsTrigger value="eda" className="rounded-lg text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Atmospheric Insights
@@ -199,20 +225,54 @@ export function Analytics({ data, loading }: Props) {
             )}
           </TabsContent>
 
-          {/* TAB 2: SHAP +1h */}
-          <TabsContent value="shap-1h" className="mt-4 space-y-4">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
-              <strong className="text-foreground">Short-Term (+1h) Feature Driving Dynamics:</strong> Near-term atmospheric prediction is governed by immediate air mass persistence (`us_aqi_lag_1h` and `pm2_5_rolling_24h`), capturing ground-level atmospheric inertia before synoptic weather patterns take over.
-            </div>
-            <ShapBarChart data={shapData1h} title="+1h Immediate Horizon" />
-          </TabsContent>
+          {/* TAB 2: Multi-Horizon SHAP Explainability */}
+          <TabsContent value="shap" className="mt-4 space-y-4">
+            {/* Horizon Selection Buttons */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-secondary/50 border border-border/60">
+                {availableHorizons.map((h) => {
+                  const hasData = Boolean(data.shap_importance[`${h}h_model`]?.length)
+                  return (
+                    <button
+                      key={h}
+                      onClick={() => setSelectedHorizon(h)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                        selectedHorizon === h
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/70"
+                      }`}
+                    >
+                      <span>+{h}h</span>
+                      {hasData && (
+                        <span className={`h-1.5 w-1.5 rounded-full ${selectedHorizon === h ? "bg-primary-foreground" : "bg-emerald-400"}`} />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
 
-          {/* TAB 3: SHAP +24h */}
-          <TabsContent value="shap-24h" className="mt-4 space-y-4">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
-              <strong className="text-foreground">Medium-Term (+24h) Feature Driving Dynamics:</strong> Over a full diurnal cycle, future numerical weather forecasts (`forecast_temp_humidity_24h`), cyclical temporal features (`month_sin`, `hour_sin`), and sustained multi-day PM2.5 trends surpass short-term lags.
+              <div className="text-xs text-muted-foreground">
+                Active Horizon: <strong className="text-foreground font-mono">+{selectedHorizon}h ({HORIZON_META[selectedHorizon]?.tag})</strong>
+              </div>
             </div>
-            <ShapBarChart data={shapData24h} title="+24h Diurnal Horizon" />
+
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="rounded-md bg-primary/15 px-2 py-0.5 text-[11px] font-bold text-primary border border-primary/25">
+                  {HORIZON_META[selectedHorizon]?.tag}
+                </span>
+                <strong className="text-foreground font-semibold">+{selectedHorizon}h Atmospheric Dynamics:</strong>
+              </div>
+              <p className="leading-relaxed">{HORIZON_META[selectedHorizon]?.description}</p>
+            </div>
+
+            {currentShapData.length > 0 ? (
+              <ShapBarChart data={currentShapData} title={`+${selectedHorizon}h Forecast Horizon`} />
+            ) : (
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-8 text-center text-xs text-muted-foreground">
+                No SHAP analysis available for +{selectedHorizon}h horizon yet.
+              </div>
+            )}
           </TabsContent>
 
           {/* TAB 4: EDA & Atmospheric Mechanics */}

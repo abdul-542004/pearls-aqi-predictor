@@ -107,8 +107,13 @@ export interface AnalyticsResponse {
     split?: { train: number; val: number; test: number }
   }
   shap_importance: {
-    "1h_model": ShapFeature[]
-    "24h_model": ShapFeature[]
+    "1h_model"?: ShapFeature[]
+    "6h_model"?: ShapFeature[]
+    "12h_model"?: ShapFeature[]
+    "24h_model"?: ShapFeature[]
+    "48h_model"?: ShapFeature[]
+    "72h_model"?: ShapFeature[]
+    [key: string]: ShapFeature[] | undefined
   }
   model_architecture: {
     strategy: string

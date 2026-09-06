@@ -1,0 +1,225 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=0.9in]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{multirow}
+
+\setlength{\parskip}{4pt}
+\setlist{nosep, leftmargin=1.5em}
+
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Pearls AQI Predictor}
+\fancyhead[R]{\small \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{\textbf{Pearls AQI Predictor} \\[0.2em]
+  \large Serverless Multi-Horizon Air Quality Forecasting for Karachi}
+\author{Abdul}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+This report documents Pearls AQI Predictor --- a serverless ML system that forecasts the US Air Quality Index for Karachi up to 72 hours ahead. The system ingests hourly data from the Open-Meteo API, engineers leakage-free features stored in Hopsworks, trains direct per-horizon XGBoost/Random Forest/LSTM models, and serves predictions through a FastAPI + React stack. GitHub Actions automates hourly feature ingestion and daily retraining. The best model (XGBoost) achieves RMSE\,=\,0.92 at +1h ($R^2$\,=\,0.995) and RMSE\,=\,9.41 at +24h ($R^2$\,=\,0.511).
+\end{abstract}
+
+\tableofcontents
+
+% ══════════════════════════════════════════════════════════════════
+\section{Introduction and Data}
+
+This project builds a complete pipeline to predict Karachi's AQI for the next three days: data collection $\rightarrow$ feature engineering $\rightarrow$ feature store $\rightarrow$ model training $\rightarrow$ REST API $\rightarrow$ web dashboard, all automated and serverless.
+
+\textbf{Data source.} All data comes from the \textbf{Open-Meteo API} (free, no key required). It provides hourly weather (temperature, humidity, precipitation, pressure, wind speed/direction) and air quality (PM\textsubscript{2.5}, PM\textsubscript{10}, CO, NO\textsubscript{2}, SO\textsubscript{2}, O\textsubscript{3}, US AQI) for any location. Open-Meteo was chosen over AQICN because it provides weather \emph{and} AQI from a single source and includes a 3-day forecast API needed for multi-day predictions.
+
+\textbf{Backfill.} A one-time backfill populated the Hopsworks feature store with $\sim$3 years of historical data (26,496 hourly rows). The date range is processed in 90-day chunks with 4-day overlap buffers to ensure lag/rolling features compute correctly at chunk boundaries.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Exploratory Data Analysis}
+
+EDA was conducted through a Jupyter notebook and a supplementary script covering stationarity, ACF/PACF, and seasonal decomposition.
+
+\textbf{Target distribution.} The US AQI for Karachi has mean\,=\,88, std\,=\,22, range 41--173. The distribution is right-skewed, concentrated in the ``Moderate'' EPA band (51--100).
+
+\textbf{Temporal patterns.} (1)~AQI is higher in winter (temperature inversions trap pollutants) and lower during monsoon (rain washes out particulates). (2)~A diurnal peak occurs around 7--8\,PM ($\sim$96 AQI), driven by rush-hour emissions and boundary-layer collapse. (3)~No meaningful day-of-week pattern exists.
+
+\textbf{Stationarity.} The ADF test confirmed the raw AQI series is stationary ($p \ll 0.05$), so no differencing is needed.
+
+\textbf{Autocorrelation.} ACF remains significant up to 72h (ACF\,=\,0.440), and PACF shows direct influence at 24h, 48h, and 72h lags. This informed the lag feature design.
+
+\textbf{Key correlations.} 6h rolling AQI (0.96), PM\textsubscript{2.5} (0.72), wind speed ($-$0.41). Hour and month show near-zero \emph{linear} correlations despite strong cyclical effects, motivating sin/cos encoding.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Feature Engineering}
+
+The \texttt{build\_features.py} module transforms 13 raw columns into $\sim$60 features:
+
+\begin{enumerate}
+  \item \textbf{Time features:} Sin/cos encoding of hour, month, day-of-week; weekend flag.
+  \item \textbf{AQI lags:} 1h, 3h, 6h, 12h, 24h, 48h, 72h (48h/72h added per ACF analysis).
+  \item \textbf{AQI rolling stats:} Rolling means (3--48h), std (6h, 24h), min/max (24h), EWM (12h half-life). All shifted by 1h to avoid leaking the current value.
+  \item \textbf{Pollutant lags/rolling:} Past values of PM\textsubscript{2.5}, PM\textsubscript{10}, CO, NO\textsubscript{2}, SO\textsubscript{2}, O\textsubscript{3}. \textbf{Raw current-timestep pollutant values are dropped} to prevent target leakage (US AQI is a deterministic function of these concentrations).
+  \item \textbf{Trend features:} AQI first-differences (1h, 3h, 6h, 24h) and deviation from rolling means.
+  \item \textbf{Weather interactions:} Wind u/v vector decomposition, temperature$\times$humidity index, cumulative precipitation (6h), rain-in-last-24h flag.
+\end{enumerate}
+
+Features are stored in \textbf{Hopsworks Feature Store} (free tier, HUDI format) with \texttt{time} as the primary key. Version 2 of the feature group contains the leakage-free features.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Modeling Approach}
+
+\textbf{Direct multi-horizon strategy.} Instead of recursively feeding +1h predictions forward (which accumulates error over 72 steps), a \emph{separate model} is trained for each horizon: +1h, +6h, +12h, +24h, +48h, +72h. Intermediate hours are linearly interpolated.
+
+\textbf{Forecast weather integration.} Open-Meteo provides 3-day weather forecasts, legitimately available at inference time. The training pipeline shifts weather columns by $-h$ to create forecast features and also computes weather \emph{deltas} (forecast $-$ current), capturing expected meteorological change.
+
+\textbf{Horizon-specific feature pruning.} For long horizons ($\geq$24h), short-term features (1h/3h lags, short rolling stats) are dropped because they carry no signal that far ahead. The model is anchored on 24h diurnal lags, rolling means, and forecast weather.
+
+\textbf{Models evaluated} (all three trained per horizon):
+\begin{itemize}
+  \item \textbf{XGBoost:} 500 trees, depth 6, lr 0.05, early stopping (20 rounds).
+  \item \textbf{Random Forest:} 300 trees, depth 15.
+  \item \textbf{LSTM (PyTorch):} 2-layer, 128 hidden, 48h sliding window, Huber loss ($\delta$=10), LR scheduling.
+\end{itemize}
+
+Data split: chronological 70/15/15 (train/val/test), no shuffling.
+
+% ══════════════════════════════════════════════════════════════════
+\section{Results}
+
+\begin{table}[H]
+\centering
+\caption{Test-set metrics. Bold = best per horizon. XGBoost wins at every horizon.}
+\label{tab:results}
+\small
+\begin{tabular}{llrrr}
+\toprule
+\textbf{Horizon} & \textbf{Model} & \textbf{RMSE} & \textbf{MAE} & \textbf{$R^2$} \\
+\midrule
+\multirow{3}{*}{+1h}
+  & \textbf{XGBoost} & \textbf{0.92} & \textbf{0.46} & \textbf{0.995} \\
+  & Random Forest    & 1.12 & 0.48 & 0.993 \\
+  & LSTM             & 1.73 & 0.82 & 0.984 \\
+\midrule
+\multirow{3}{*}{+6h}
+  & \textbf{XGBoost} & \textbf{3.94} & \textbf{2.03} & \textbf{0.914} \\
+  & Random Forest    & 4.74 & 2.28 & 0.876 \\
+  & LSTM             & 4.89 & 2.50 & 0.869 \\
+\midrule
+\multirow{3}{*}{+12h}
+  & \textbf{XGBoost} & \textbf{6.34} & \textbf{3.57} & \textbf{0.778} \\
+  & Random Forest    & 6.76 & 3.78 & 0.748 \\
+  & LSTM             & 7.05 & 4.09 & 0.728 \\
+\midrule
+\multirow{3}{*}{+24h}
+  & \textbf{XGBoost} & \textbf{9.41} & \textbf{6.25} & \textbf{0.511} \\
+  & Random Forest    & 9.61 & 6.38 & 0.490 \\
+  & LSTM             & 9.82 & 6.69 & 0.472 \\
+\midrule
+\multirow{3}{*}{+48h}
+  & \textbf{XGBoost} & \textbf{12.07} & \textbf{8.29} & \textbf{0.200} \\
+  & Random Forest    & 12.28 & 8.49 & 0.172 \\
+  & LSTM             & 14.26 & 9.83 & $-$0.136 \\
+\midrule
+\multirow{3}{*}{+72h}
+  & \textbf{XGBoost} & \textbf{12.60} & \textbf{8.90} & \textbf{0.131} \\
+  & Random Forest    & 13.25 & 9.25 & 0.040 \\
+  & LSTM             & 13.00 & 9.09 & 0.042 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Short horizons (+1h--+12h)} achieve strong accuracy --- the +1h model has sub-1-point RMSE. \textbf{+24h} is moderate ($R^2$\,=\,0.51), with the model shifting from AQI lags to seasonal and weather features. \textbf{+48h/+72h} degrade substantially ($R^2$\,=\,0.13--0.20), reflecting the inherent difficulty of multi-day AQI forecasting. The LSTM at +48h is worse than the mean baseline ($R^2 < 0$). All XGBoost models beat naive baselines (mean, persistence, same-hour-yesterday) at every horizon.
+
+% ══════════════════════════════════════════════════════════════════
+\section{SHAP Explainability}
+
+SHAP analysis on the +1h and +24h XGBoost models reveals how feature importance shifts with horizon:
+
+\begin{table}[H]
+\centering
+\caption{Top SHAP features: +1h vs +24h. The model shifts from recent AQI lags (short-term) to seasonal/weather/pollutant-rolling features (long-term).}
+\small
+\begin{tabular}{lr|lr}
+\toprule
+\multicolumn{2}{c|}{\textbf{+1h Model}} & \multicolumn{2}{c}{\textbf{+24h Model}} \\
+\textbf{Feature} & \textbf{$|$SHAP$|$} & \textbf{Feature} & \textbf{$|$SHAP$|$} \\
+\midrule
+us\_aqi\_lag\_1h       & 9.18 & pm2\_5\_rolling\_6h           & 4.46 \\
+pm2\_5\_rolling\_24h   & 3.32 & month\_sin                    & 1.98 \\
+ozone\_rolling\_6h     & 1.07 & pm2\_5\_rolling\_24h          & 1.87 \\
+aqi\_change\_1h        & 0.63 & forecast\_temp\_humidity\_24h & 1.44 \\
+aqi\_rolling\_3h       & 0.45 & aqi\_change\_6h               & 1.19 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At +1h, the 1h AQI lag dominates (AQI barely changes in one hour). At +24h, that lag is pruned entirely; instead \texttt{month\_sin} (seasonality) and \texttt{forecast\_temp\_humidity\_24h} (future weather) become key drivers. No raw pollutant columns appear in either model, confirming the leakage fix works.
+
+% ══════════════════════════════════════════════════════════════════
+\section{System Architecture and Deployment}
+
+\textbf{Backend.} A FastAPI application serves four endpoints: \texttt{/api/current} (live AQI + EPA category + pollutants), \texttt{/api/forecast} (72h direct forecast), \texttt{/api/history} (48h observations), and \texttt{/api/analytics} (model metrics + SHAP data). A 5-minute TTL cache avoids redundant API calls. Deployed on \textbf{FastAPI Cloud}.
+
+\textbf{Frontend.} React + TypeScript + Vite + Tailwind CSS v4 + Recharts dashboard with: live AQI hero card, pollutant matrix, 72h forecast chart, 48h history chart, and SHAP explainability panel. Deployed on \textbf{Vercel} with API proxy rewrites.
+
+\textbf{CI/CD.} GitHub Actions runs two scheduled jobs:
+\begin{itemize}
+  \item \textbf{Feature pipeline} (hourly): fetches 14 days of actuals + 3 days of forecasts, engineers features, upserts to Hopsworks. Uses a minimal dependency set (no PyTorch/XGBoost).
+  \item \textbf{Training pipeline} (daily at 02:00 UTC): retrains XGBoost and RF models, commits updated artifacts to the repo, which triggers FastAPI Cloud auto-redeploy. LSTM is disabled in CI (slow, no accuracy gain).
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════
+\section{Key Decisions and Limitations}
+
+\textbf{Key design decisions:}
+\begin{enumerate}
+  \item \emph{Direct vs.\ recursive forecasting} --- avoids error accumulation; enables horizon-specific feature selection.
+  \item \emph{Dropping raw pollutants} --- prevents target leakage since AQI is deterministic from pollutant concentrations.
+  \item \emph{Sin/cos time encoding} --- preserves temporal proximity (hour 23 $\approx$ hour 0).
+  \item \emph{Separate CI requirements files} --- feature pipeline installs only 6 packages; training adds XGBoost/scikit-learn.
+  \item \emph{Auto-commit models} --- GitHub Actions commits retrained artifacts $\rightarrow$ triggers cloud redeploy automatically.
+  \item \emph{PyTorch instead of TensorFlow} --- TensorFlow has a protobuf version conflict with Hopsworks on Python 3.13.
+\end{enumerate}
+
+\textbf{Limitations:} (1)~Long-horizon accuracy is inherently limited ($R^2 \approx 0.13$ at +72h). (2)~Single-city support. (3)~No automated hyperparameter tuning.
+
+\textbf{Future work:} Satellite aerosol data integration, push alerts for hazardous forecasts, conformal prediction intervals, multi-city extension.
+
+% ══════════════════════════════════════════════════════════════════
+\section*{Technology Stack}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Technology} \\
+\midrule
+ML Models      & XGBoost, scikit-learn (RF), PyTorch (LSTM) \\
+Feature Store  & Hopsworks (free tier) \\
+Data API       & Open-Meteo \\
+Backend        & FastAPI (deployed on FastAPI Cloud) \\
+Frontend       & React, TypeScript, Vite, Tailwind v4, Recharts (Vercel) \\
+CI/CD          & GitHub Actions \\
+Explainability & SHAP \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
