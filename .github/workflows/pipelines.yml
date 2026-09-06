@@ -61,6 +61,8 @@ jobs:
       github.event.schedule == '0 2 * * *' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.run_training == 'true')
     runs-on: ubuntu-latest
+    env:
+      TRAIN_LSTM: "false"
     permissions:
       contents: write
     steps:
@@ -71,10 +73,8 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies (CPU-only torch to save disk)
-        run: |
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements-training.txt
 
       - name: Run training pipeline
         run: python -m aqi_predictor.pipelines.training_pipeline

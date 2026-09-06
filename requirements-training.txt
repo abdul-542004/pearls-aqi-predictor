@@ -1,0 +1,11 @@
+# Minimal dependencies for the training pipeline in CI.
+# Excludes heavy deep learning frameworks (torch/LSTM) to enable fast retraining.
+hopsworks[python]>=5.0.0
+joblib
+numpy
+pandas
+python-dotenv
+requests
+scikit-learn
+xgboost
+pyarrow

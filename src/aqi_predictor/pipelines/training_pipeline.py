@@ -12,6 +12,7 @@ Run:
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -31,8 +32,12 @@ from aqi_predictor.features.hopsworks_utils import (
     get_or_create_feature_group,
 )
 from aqi_predictor.models import evaluate as eval_mod
-from aqi_predictor.models import lstm_model, random_forest, xgboost_model
+from aqi_predictor.models import random_forest, xgboost_model
 from aqi_predictor.models.registry import save_model_local, upload_to_hopsworks
+
+# Control LSTM training via environment variable (default: False in CI to prevent 1hr runs, True locally)
+DEFAULT_TRAIN_LSTM = "false" if os.getenv("CI") else "true"
+TRAIN_LSTM = os.getenv("TRAIN_LSTM", DEFAULT_TRAIN_LSTM).lower() in ("true", "1", "yes")
 
 # -- Constants ---------------------------------------------------------------
 
@@ -275,6 +280,13 @@ def train_horizon(horizon, target_col, feature_cols,
 
     # --- LSTM ---
     if train_lstm:
+        try:
+            from aqi_predictor.models import lstm_model
+        except ImportError as e:
+            print(f"\n  [Notice] PyTorch/LSTM dependencies unavailable ({e}). Skipping LSTM.")
+            train_lstm = False
+
+    if train_lstm:
         print(f"\n--- LSTM {tag} ---")
         scaler_X = StandardScaler()
         X_train_s = scaler_X.fit_transform(X_train)
@@ -322,6 +334,8 @@ def train_horizon(horizon, target_col, feature_cols,
 
 def run():
     """Execute the direct multi-horizon training pipeline."""
+    print(f"\nTraining configuration: TRAIN_LSTM={TRAIN_LSTM}")
+
     # 1. Fetch data
     df = fetch_training_data()
 
@@ -382,7 +396,7 @@ def run():
         results, best_name = train_horizon(
             h, target_col, feature_cols,
             h_train, h_val, h_test,
-            train_lstm=True,  # Train LSTM across all horizons
+            train_lstm=TRAIN_LSTM,
         )
         all_results[f"+{h}h"] = results
         best_models[f"+{h}h"] = best_name
