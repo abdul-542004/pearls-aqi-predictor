@@ -39,7 +39,7 @@
   \large Serverless Multi-Horizon Air Quality Forecasting for Karachi \\[0.5em]
   \normalsize End-to-End ML Pipeline Report
 }
-\author{Abdul}
+\author{Muhammad Abdullah Khan}
 \date{September 2026}
 
 % ══════════════════════════════════════════════════════════════════
@@ -48,7 +48,7 @@
 \thispagestyle{empty}
 
 \begin{abstract}
-This report documents the design, implementation, and evaluation of Pearls AQI Predictor --- a serverless machine learning system that forecasts the US Air Quality Index (AQI) for Karachi up to 72 hours ahead.  The system ingests hourly weather and pollutant data from the Open-Meteo API, engineers leakage-free features, trains direct per-horizon models (XGBoost, Random Forest, LSTM), and serves real-time predictions through a FastAPI backend and React dashboard.  Automation is handled by GitHub Actions (hourly feature updates, daily retraining) and deployment is managed through FastAPI Cloud and Vercel.  The best model (XGBoost) achieves an RMSE of 0.92 at the +1h horizon ($R^2 = 0.995$) and 9.41 at +24h ($R^2 = 0.511$).  Comprehensive SHAP analysis across all six forecast horizons (+1h to +72h), supported by automated staleness detection, reveals an atmospheric phase transition from short-term autoregressive persistence to synoptic meteorological forcing, while confirming the complete absence of target leakage.
+Pearls AQI Predictor is a serverless machine learning system that forecasts Karachi's US Air Quality Index (AQI) up to 72 hours ahead. It pulls hourly weather and pollutant data from the Open-Meteo API, engineers leakage-free features, and trains a dedicated model for each forecast horizon (XGBoost, Random Forest, and LSTM were compared). Predictions are served through a FastAPI backend and a React dashboard, and the whole cycle -- data collection, retraining, and deployment -- is automated with GitHub Actions. The best model, XGBoost, is highly accurate in the near term (RMSE 0.92 at +1h, $R^2 = 0.995$) and remains useful a full day out (RMSE 9.41 at +24h, $R^2 = 0.511$). SHAP analysis across all six horizons shows predictions shifting from short-term persistence to weather-driven forecasting as the horizon grows, while confirming the pipeline has no target leakage.
 \end{abstract}
 
 \tableofcontents
@@ -57,50 +57,40 @@ This report documents the design, implementation, and evaluation of Pearls AQI P
 % ══════════════════════════════════════════════════════════════════
 \section{Introduction}
 
-Air pollution is a serious public health concern in Karachi, Pakistan's largest city.  The US Air Quality Index (AQI) condenses concentrations of multiple pollutants into a single number that communicates health risk to the public.  This project builds a complete, serverless pipeline that:
+Air pollution is a serious public-health concern in Karachi, Pakistan's largest city. Pearls AQI Predictor is a complete, serverless pipeline that turns raw weather and pollution readings into 72-hour AQI forecasts:
 
 \begin{enumerate}
-  \item Collects hourly weather and pollutant data from a free public API.
-  \item Engineers time-aware features and stores them in a cloud feature store.
-  \item Trains separate ML models for six forecast horizons (1h, 6h, 12h, 24h, 48h, 72h).
-  \item Serves forecasts through a REST API and an interactive web dashboard.
-  \item Automates the entire cycle with GitHub Actions.
+  \item Pull hourly weather and pollutant data from a free public API.
+  \item Engineer time-aware, leakage-free predictive features.
+  \item Train a dedicated model for each forecast horizon (1h, 6h, 12h, 24h, 48h, 72h).
+  \item Serve forecasts through a REST API and an interactive dashboard.
+  \item Automate the full cycle with GitHub Actions.
 \end{enumerate}
 
-The goal is to predict the AQI for the \emph{next three days} with enough accuracy to be useful for health advisories, while keeping the infrastructure entirely serverless and free-tier friendly.
+The goal: forecasts accurate enough to support health advisories, running entirely on free-tier, serverless infrastructure.
 
 
 % ══════════════════════════════════════════════════════════════════
 \section{Data Sources and Collection}
 
 \subsection{Open-Meteo API}
+All data comes from the free, keyless \textbf{Open-Meteo API}. It was chosen because it provides weather and air quality from a single source, includes a 3-day weather forecast (essential for direct multi-day prediction), and has generous rate limits for automated pipelines.
 
-All data comes from the \textbf{Open-Meteo API} (\texttt{open-meteo.com}), which provides free, keyless access to both weather and air quality observations and numerical forecasts.  Open-Meteo was chosen because it provides weather and air quality from a single source, includes a 3-day meteorological forecast API (essential for direct multi-day prediction), and has generous rate limits suitable for automated pipelines.
-
-Two types of hourly variables are fetched:
-
+Two sets of hourly variables are pulled:
 \begin{itemize}
-  \item \textbf{Weather variables} (6): temperature (2m), relative humidity (2m), precipitation, sea-level pressure, wind speed (10m), and wind direction (10m).
-  \item \textbf{Air quality variables} (7): PM\textsubscript{2.5}, PM\textsubscript{10}, CO, NO\textsubscript{2}, SO\textsubscript{2}, O\textsubscript{3}, and the US AQI (the prediction target).
+  \item \textbf{Weather} (6): temperature, relative humidity, precipitation, sea-level pressure, wind speed, and wind direction.
+  \item \textbf{Air quality} (7): PM\textsubscript{2.5}, PM\textsubscript{10}, CO, NO\textsubscript{2}, SO\textsubscript{2}, O\textsubscript{3}, and the US AQI (the prediction target).
 \end{itemize}
 
-\subsection{Location}
-
-The system is configured for \textbf{Karachi} (24.86\textdegree N, 67.01\textdegree E), an arid coastal megacity with severe particulate burdens (mean AQI $\approx 88$).  The geographical coordinates are configurable through environment variables to facilitate multi-city expansion.
-
-\subsection{Historical Backfill}
-
-A one-time backfill pipeline (\texttt{backfill.py}) populated the feature store with three years of historical hourly observations (September 2023 -- September 2026, totaling 26,496 rows).  To respect API chunking constraints, historical data was processed in 90-day segments with a 4-day rolling overlap buffer, ensuring that lag and rolling statistics (up to 72 hours) compute continuously across boundaries.
+\subsection{Location and Historical Data}
+The system targets \textbf{Karachi} (24.86\textdegree N, 67.01\textdegree E), an arid coastal megacity with a mean AQI of about 88; coordinates are configurable for future multi-city expansion. A one-time backfill populated the feature store with three years of hourly history (September 2023 -- September 2026, 26,496 rows), processed in overlapping 90-day chunks so that lag and rolling features compute correctly across chunk boundaries.
 
 
 % ══════════════════════════════════════════════════════════════════
 \section{Exploratory Data Analysis}
 
-Exploratory Data Analysis (EDA) was performed across two phases: an initial distribution and correlation screening (\texttt{01\_eda\_open\_meteo\_aqi.ipynb}) and advanced time-series decomposition and autocorrelation modeling (\texttt{eda\_advanced.py}).
-
-\subsection{Target Variable Distribution and Outliers}
-
-The US AQI for Karachi exhibits the summary statistics in Table~\ref{tab:eda_stats}.
+\subsection{Target Distribution}
+Table~\ref{tab:eda_stats} summarizes Karachi's US AQI over the 3-year dataset. The distribution is right-skewed: most readings fall in the EPA "Moderate" band (51--100), with a tail reaching "Unhealthy" (151--200). Figure~\ref{fig:eda_outliers} shows the distribution and seasonal spread.
 
 \begin{table}[H]
 \centering
@@ -119,8 +109,6 @@ Max    & 173 \\
 \end{tabular}
 \end{table}
 
-The distribution is moderately right-skewed, with the majority of values falling in the EPA ``Moderate'' category (51--100) and an extended tail reaching into ``Unhealthy'' (151--200).  Figure~\ref{fig:eda_outliers} illustrates the empirical distribution, seasonal boxplots, and outlier boundaries.
-
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.88\linewidth]{eda_outliers.png}
@@ -128,38 +116,34 @@ The distribution is moderately right-skewed, with the majority of values falling
 \label{fig:eda_outliers}
 \end{figure}
 
-\subsection{Temporal Dynamics: Diurnal and Seasonal Cycles}
-
-Time-series decomposition reveals two dominant periodicities:
+\subsection{Daily and Seasonal Patterns}
+AQI follows two clear cycles, shown in Figures~\ref{fig:eda_daily} and \ref{fig:eda_stl}:
 \begin{itemize}
-  \item \textbf{Diurnal Cycle}: As shown in Figure~\ref{fig:eda_daily}, AQI peaks reliably between 7:00 PM and 10:00 PM ($\sim$96 AQI).  This occurs when evening commute emissions coincide with the collapse of the planetary boundary layer at sunset, trapping vehicular and industrial exhaust near ground level.  AQI reaches its minimum in the early morning before sunrise.
-  \item \textbf{Seasonal Cycle}: AQI is substantially higher and more volatile during winter (November--February) due to persistent thermal inversions and calm continental winds.  Conversely, during the summer monsoon (July--September), marine boundary layer ventilation and precipitation scavenging wash out suspended particulates.
+  \item \textbf{Daily}: pollution peaks in the evening (7--10 PM) as rush-hour emissions get trapped by the collapsing boundary layer at sunset, and is lowest just before sunrise.
+  \item \textbf{Seasonal}: winter (November--February) is worse and more volatile, driven by thermal inversions and calm winds; the summer monsoon (July--September) ventilates the city and washes out particulates.
 \end{itemize}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.88\linewidth]{eda_daily_pattern.png}
-\caption{Diurnal hourly AQI profile for Karachi, highlighting morning and evening rush-hour concentration spikes.}
+\caption{Diurnal hourly AQI profile for Karachi, highlighting morning and evening rush-hour spikes.}
 \label{fig:eda_daily}
 \end{figure}
-
-Figure~\ref{fig:eda_stl} displays the Seasonal-Trend decomposition using LOESS (STL).  The decomposition confirms that seasonal oscillations account for substantial variance, while multi-week trend movements reflect regional air mass shifts.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\linewidth]{eda_stl_decomposition.png}
-\caption{Seasonal-Trend Decomposition using LOESS (STL) of hourly AQI, isolating trend, seasonal cyclicity, and stochastic residuals.}
+\caption{Seasonal-Trend decomposition (STL) of hourly AQI into trend, seasonal cycle, and residual components.}
 \label{fig:eda_stl}
 \end{figure}
 
-\subsection{Stationarity and Autocorrelation Structure}
-
-The Augmented Dickey-Fuller (ADF) test rejected the unit root null hypothesis ($p \ll 0.001$), confirming stationarity.  Figure~\ref{fig:eda_acf_pacf} shows the Autocorrelation Function (ACF) and Partial Autocorrelation Function (PACF) up to 72 lags.  The ACF demonstrates strong persistence, remaining at 0.440 even at lag 72.  The PACF displays pronounced spikes at 24h, 48h, and 72h, demonstrating sharp diurnal resonance.  This empirical evidence justifies the explicit incorporation of 24h, 48h, and 72h lag and rolling features.
+\subsection{Autocorrelation}
+An Augmented Dickey-Fuller test confirms the series is stationary ($p \ll 0.001$). The ACF/PACF plots (Figure~\ref{fig:eda_acf_pacf}) show strong persistence -- autocorrelation is still 0.44 at a 72-hour lag -- with sharp PACF spikes at exactly 24h, 48h, and 72h. This is why the model explicitly uses lag and rolling features at those intervals.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.9\linewidth]{eda_acf_pacf.png}
-\caption{ACF and PACF of Karachi hourly AQI across 72 lags, exhibiting persistence and diurnal spikes at multiples of 24 hours.}
+\caption{ACF and PACF of Karachi hourly AQI across 72 lags, showing persistence and diurnal spikes at multiples of 24 hours.}
 \label{fig:eda_acf_pacf}
 \end{figure}
 
@@ -168,78 +152,50 @@ The Augmented Dickey-Fuller (ADF) test rejected the unit root null hypothesis ($
 \section{Feature Engineering}
 \label{sec:features}
 
-Feature engineering is performed by \texttt{build\_features.py}, converting 13 raw variables into 60+ leakage-free predictive signals structured into six functional categories:
+\texttt{build\_features.py} turns 13 raw variables into 60+ leakage-free predictive features, grouped into six categories (Table~\ref{tab:feature_categories}).
 
-\subsection{Cyclical Temporal Encodings}
-Hours (0--23), months (1--12), and days of the week (0--6) are encoded via trigonometric pairs:
-\begin{equation}
-  x_{\sin} = \sin\left(\frac{2\pi \cdot t}{T}\right), \quad x_{\cos} = \cos\left(\frac{2\pi \cdot t}{T}\right)
-\end{equation}
-This ensures that boundary transitions (e.g., hour 23 to 0, or December to January) maintain smooth continuous distance.  A binary \texttt{is\_weekend} flag captures economic activity shifts.
+\begin{table}[H]
+\centering
+\caption{Feature categories engineered from raw weather and pollutant data.}
+\label{tab:feature_categories}
+\small
+\begin{tabular}{p{3.3cm}p{9.7cm}}
+\toprule
+\textbf{Category} & \textbf{Description} \\
+\midrule
+Cyclical time & Hour, month, and day-of-week encoded as sine/cosine pairs so boundaries (e.g.\ 23:00 $\to$ 00:00) stay continuous, plus a weekend flag. \\
+AQI lags & Past AQI values at $t{-}1, 3, 6, 12, 24, 48, 72$ hours, capturing multi-day diurnal persistence. \\
+Rolling statistics & Rolling means, standard deviation, min/max, and an exponentially weighted average of AQI (3h--48h windows), all shifted by 1 hour to avoid leakage. \\
+Pollutant history & Only \emph{historical} pollutant lags and rolling averages are kept; current-timestep readings are dropped entirely (see below). \\
+Trend \& momentum & First differences ($\Delta$AQI at 1h, 3h, 6h, 24h) and deviation from rolling baselines. \\
+Weather physics & Wind decomposed into u/v vectors, a temperature$\times$humidity aerosol-formation proxy, and rainfall/wash-out indicators. \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-\subsection{Target Autoregressive Lags}
-Lagged target features are generated at $t - 1$, $t - 3$, $t - 6$, $t - 12$, $t - 24$, $t - 48$, and $t - 72$ hours.  The extended 48h and 72h lags capture multi-day diurnal persistence identified in the PACF analysis.
-
-\subsection{Rolling and Statistical Aggregations}
-Rolling means (3h, 6h, 12h, 24h, 48h), rolling standard deviation (6h, 24h), rolling extrema (24h min/max), and exponentially weighted moving averages (EWMA with 12h half-life) summarize volatility and air mass trajectory.  Critically, all rolling windows are \textbf{shifted by 1 hour} ($t - 1$) to prevent target leakage.
-
-\subsection{Pollutant Lags and Leakage Prevention}
-The US AQI is a deterministic piecewise linear function of instantaneous pollutant concentrations ($PM_{2.5}, PM_{10}, O_3, NO_2, SO_2, CO$).  Consequently, feeding current-timestep pollutant concentrations into the feature matrix constitutes severe target leakage.  In this pipeline, \textbf{all current raw pollutant concentrations are dropped}.  Only historical lags ($t-1, t-24$) and rolling aggregates (6h, 12h, 24h) are preserved as valid state features.
-
-\subsection{Trend and Momentum Indicators}
-First differences ($\Delta \text{AQI}_{1\text{h}}, \Delta \text{AQI}_{3\text{h}}, \Delta \text{AQI}_{6\text{h}}, \Delta \text{AQI}_{24\text{h}}$) and deviations from rolling baselines capture atmospheric acceleration and dispersion momentum.
-
-\subsection{Atmospheric Physics and Weather Interactions}
-\begin{itemize}
-  \item \textbf{Wind Vector Decomposition}: Wind speed ($s$) and meteorological direction ($\theta$) are converted into orthogonal Cartesian vectors ($u = -s \sin \theta, v = -s \cos \theta$) to enable linear boundary layer modeling.
-  \item \textbf{Particulate Formation Proxy}: The temperature-humidity interaction index ($T \times RH / 100$) models secondary inorganic aerosol nucleation under humid coastal conditions.
-  \item \textbf{Precipitation Indicators}: Cumulative rainfall over 6 hours and binary 24-hour wash-out indicators account for wet deposition scavenging.
-\end{itemize}
-
-
-% ══════════════════════════════════════════════════════════════════
-\section{Feature Store Architecture}
-
-Features are registered in \textbf{Hopsworks Feature Store} (\texttt{aqi\_features}, version 2).  The feature group uses \texttt{time} as both primary key and event-time stamp, stored in Apache Hudi format to support ACID upserts, time-travel queries, and reproducible dataset snapshotting.  An insert-with-retry handler manages transient HTTP connectivity in cloud automation.
+\textbf{Preventing target leakage.} The US AQI is a deterministic function of instantaneous pollutant concentrations, so feeding those same concentrations into the model would let it "cheat." All current-timestep pollutant readings are therefore excluded -- only their historical lags and rolling averages are used as features.
 
 
 % ══════════════════════════════════════════════════════════════════
 \section{Direct Multi-Horizon Modeling}
 \label{sec:modeling}
 
-\subsection{Direct vs.\ Recursive Formulation}
-
-Instead of a recursive single-step autoregressive model that feeds noisy predictions back into itself across 72 iterations, the system deploys a \textbf{direct multi-horizon forecasting architecture}.  Six autonomous models are trained for discrete horizons:
+\subsection{Why Six Separate Models}
+Rather than a single recursive model that feeds its own predictions back in across 72 steps -- compounding errors along the way -- the system trains one direct model per horizon:
 \begin{equation}
-  \hat{y}_{t+h} = f_h(\mathbf{x}_t, \mathbf{w}_{t+h}), \quad h \in \{1, 6, 12, 24, 48, 72\}
+  \hat{y}_{t+h} = f_h(\mathbf{x}_t, \mathbf{w}_{t+h}), \quad h \in \{1, 6, 12, 24, 48, 72\}\ \text{hours}
 \end{equation}
-Intermediate hourly forecasts (e.g., +2h through +5h) are linearly interpolated between bounding direct models.
+Hours in between (e.g.\ +2h to +5h) are filled in by linearly interpolating between the two nearest models. Each horizon's model also receives Open-Meteo's 3-day \emph{weather forecast} for that future timestamp ($\mathbf{w}_{t+h}$) plus the forecasted change from now ($\Delta\mathbf{w}_h$), and is pruned to the features that matter most at that range: short lags for near-term models, and diurnal/rolling/forecast features for the 24h+ models.
 
-\subsection{Numerical Forecast Weather and Delta Features}
-
-At time $t$, Open-Meteo provides 3-day weather forecasts.  These future meteorological signals are integrated into the horizon models by shifting weather features by $-h$ steps ($\mathbf{w}_{t+h}$).  Furthermore, meteorological deltas ($\Delta \mathbf{w}_h = \mathbf{w}_{t+h} - \mathbf{w}_t$) supply the model with expected changes in sea breeze, humidity, and barometric pressure over the forecast window.
-
-\subsection{Horizon-Specific Feature Pruning}
-
-For immediate horizons ($h \le 6$), short-term lags ($t-1$, $t-3$) are highly predictive.  For extended horizons ($h \ge 24$), high-frequency lags decay into stochastic noise.  To prevent overfitting, features are pruned per horizon: the 24h, 48h, and 72h models discard 1h/3h lags and focus on 24h diurnal cycles, rolling baselines, and forecast weather deltas.
-
-\subsection{Model Candidates and Validation Split}
-
-Three model families were benchmarked across all horizons:
-\begin{enumerate}
-  \item \textbf{XGBoost}: 500 gradient-boosted trees, max depth 6, learning rate 0.05, early stopping on validation loss.
-  \item \textbf{Random Forest}: 300 bagged trees, max depth 15, square-root feature subsampling.
-  \item \textbf{PyTorch LSTM}: 2-layer recurrent network (128 hidden units), 48-hour sliding window, Huber loss ($\delta=10$), Adam optimizer.
-\end{enumerate}
-Data is split chronologically: 70\% train (18,547 rows), 15\% validation (3,974 rows), 15\% test (3,975 rows), preserving temporal causality.
+\subsection{Model Candidates and Data Split}
+Three model families were benchmarked at every horizon: \textbf{XGBoost} (500 trees, depth 6, learning rate 0.05, early stopping), \textbf{Random Forest} (300 trees, depth 15), and a \textbf{PyTorch LSTM} (2 layers, 128 hidden units, 48-hour window). Data was split chronologically -- 70\% train (18,547 rows), 15\% validation (3,974 rows), 15\% test (3,975 rows) -- to preserve temporal order and avoid look-ahead bias.
 
 
 % ══════════════════════════════════════════════════════════════════
-\section{Benchmark Results and Analysis}
+\section{Benchmark Results}
+\label{sec:results}
 
-\subsection{Evaluation Metrics}
-
-Table~\ref{tab:results} summarizes the test-set performance across all models and horizons.  XGBoost achieved the highest accuracy across every horizon.
+Table~\ref{tab:results} shows test-set performance for all three models across all six horizons. XGBoost wins at every horizon.
 
 \begin{table}[H]
 \centering
@@ -283,38 +239,24 @@ Table~\ref{tab:results} summarizes the test-set performance across all models an
 \end{tabular}
 \end{table}
 
-\subsection{Performance Degradation Analysis}
-
-Predictive error scales with horizon distance:
-\begin{itemize}
-  \item At +1h, error is negligible (RMSE 0.92, $R^2 = 0.995$), capturing atmospheric inertia.
-  \item At +6h and +12h, strong fidelity is retained ($R^2 = 0.914$ and $0.778$), aiding same-day public alerts.
-  \item At +24h, the model maintains operational utility ($R^2 = 0.511$, RMSE 9.41), accurately tracking diurnal peak-trough shifts.
-  \item Beyond 24h, predictability decays ($R^2 = 0.200$ at +48h, $0.131$ at +72h).  Multi-day air quality is inherently governed by unpredictable local emissions (e.g., traffic fluctuations, unannounced industrial activity) and mesoscale weather forecast drift.  The leveling off from +48h to +72h (RMSE 12.07 to 12.60) indicates the models converge gracefully toward the seasonal climatological mean.
-  \item XGBoost outperforms naive baselines (persistence, climatological mean, same-hour-yesterday) across all horizons.
-\end{itemize}
+As expected, accuracy declines with horizon length: near-perfect at +1h, still strong through +12h, and useful for next-day planning at +24h. Beyond a day, skill drops off as multi-day air quality becomes dominated by unpredictable local emissions and weather-forecast drift -- the RMSE plateau between +48h and +72h shows the models gracefully converging toward the seasonal climatological average rather than degrading further. XGBoost consistently beats naive baselines (persistence, climatology, same-hour-yesterday) at every horizon.
 
 
 % ══════════════════════════════════════════════════════════════════
-\section{Explainability with Multi-Horizon SHAP}
+\section{Explainability with SHAP}
 \label{sec:shap}
 
-\subsection{Automated Staleness Detection and Refresh Pipeline}
+To understand \emph{why} the models predict what they do, SHAP (SHapley Additive exPlanations) values were computed for all six horizon models. An automated staleness check compares each model's last-modified time against its saved SHAP report and only recomputes when the model has actually changed, keeping this fast in CI.
 
-The pipeline implements an automated staleness detection architecture (\texttt{is\_horizon\_stale}).  Before running TreeExplainer, the system inspects each horizon's serialized output reports against the modification timestamp of the corresponding model artifact (\texttt{model.pkl}).  If a model has been retrained or an output artifact is missing, SHAP recalculation is triggered automatically.  If up-to-date, redundant computations are bypassed, ensuring efficiency during CI/CD runs.
-
-\subsection{Cross-Horizon Feature Dynamics}
-
-Figure~\ref{fig:shap_evolution} charts the cross-horizon evolution of feature importance from +1h to +72h.  A clear physical phase transition is observed: autoregressive lags dominate immediate predictions, while future weather forecasts and seasonal cyclical components take over at longer lead times.
+\subsection{How Feature Importance Shifts With Horizon}
+Figure~\ref{fig:shap_evolution} and Table~\ref{tab:shap_categories} reveal a clear pattern: short-horizon predictions lean almost entirely on the AQI's own recent history, while long-horizon predictions lean on forecasted weather and seasonal timing instead.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\linewidth]{shap_cross_horizon_evolution.png}
-\caption{Cross-horizon SHAP feature importance evolution (+1h to +72h). Autoregressive lags dictate short-term predictions, transitioning to numerical weather forecasts and seasonal dynamics at multi-day horizons.}
+\caption{Cross-horizon SHAP feature importance evolution (+1h to +72h), showing the shift from autoregressive lags to forecast weather and seasonal features.}
 \label{fig:shap_evolution}
 \end{figure}
-
-Table~\ref{tab:shap_categories} quantifies the distribution of mean absolute SHAP importance across functional categories.
 
 \begin{table}[H]
 \centering
@@ -336,13 +278,12 @@ Cyclical Time Features    &  4.8\% &  9.3\% & 11.0\% & 10.1\% & 20.8\% & 26.2\% 
 \end{tabular}
 \end{table}
 
-\subsection{Horizon Feature Rankings}
-
-Tables~\ref{tab:shap_1h}, \ref{tab:shap_24h}, and \ref{tab:shap_72h} list the dominant features for the immediate (+1h), diurnal (+24h), and extended (+72h) models.
+\subsection{Top Drivers at Each Horizon}
+Tables~\ref{tab:shap_1h}, \ref{tab:shap_24h}, and \ref{tab:shap_72h} list the top 5 features by mean $|$SHAP$|$ for the immediate, diurnal, and 3-day models; Figure~\ref{fig:shap_horizons} plots them side by side.
 
 \begin{table}[H]
 \centering
-\caption{Top features for the +1h XGBoost model by mean absolute SHAP value.}
+\caption{Top features for the +1h XGBoost model.}
 \label{tab:shap_1h}
 \small
 \begin{tabular}{lr}
@@ -354,16 +295,13 @@ Tables~\ref{tab:shap_1h}, \ref{tab:shap_24h}, and \ref{tab:shap_72h} list the do
 \texttt{ozone\_rolling\_6h}     & 2.085 \\
 \texttt{aqi\_rolling\_3h}       & 1.183 \\
 \texttt{aqi\_change\_1h}        & 1.044 \\
-\texttt{pm2\_5\_lag\_1h}         & 0.317 \\
-\texttt{pm2\_5\_rolling\_12h}   & 0.313 \\
-\texttt{pm2\_5\_lag\_24h}        & 0.221 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[H]
 \centering
-\caption{Top features for the +24h XGBoost model by mean absolute SHAP value.}
+\caption{Top features for the +24h XGBoost model.}
 \label{tab:shap_24h}
 \small
 \begin{tabular}{lr}
@@ -375,19 +313,13 @@ Tables~\ref{tab:shap_1h}, \ref{tab:shap_24h}, and \ref{tab:shap_72h} list the do
 \texttt{pm2\_5\_rolling\_24h}          & 2.321 \\
 \texttt{forecast\_temp\_humidity\_24h} & 1.996 \\
 \texttt{pm2\_5\_rolling\_12h}          & 1.795 \\
-\texttt{aqi\_change\_6h}               & 1.481 \\
-\texttt{pm10\_rolling\_6h}             & 1.027 \\
-\texttt{nitrogen\_dioxide\_rolling\_6h} & 0.975 \\
-\texttt{aqi\_trend\_24h}               & 0.854 \\
-\texttt{forecast\_wind\_speed\_10m\_24h} & 0.809 \\
-\texttt{forecast\_wind\_u\_24h}        & 0.775 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[H]
 \centering
-\caption{Top features for the +72h XGBoost model by mean absolute SHAP value.}
+\caption{Top features for the +72h XGBoost model.}
 \label{tab:shap_72h}
 \small
 \begin{tabular}{lr}
@@ -399,105 +331,84 @@ Tables~\ref{tab:shap_1h}, \ref{tab:shap_24h}, and \ref{tab:shap_72h} list the do
 \texttt{forecast\_pressure\_msl\_72h}  & 2.260 \\
 \texttt{forecast\_wind\_u\_72h}        & 1.361 \\
 \texttt{pm2\_5\_rolling\_24h}          & 1.080 \\
-\texttt{delta\_temp\_humidity\_72h}    & 1.053 \\
-\texttt{pressure\_msl}                 & 0.652 \\
-\texttt{hour\_cos}                     & 0.607 \\
-\texttt{aqi\_change\_6h}               & 0.501 \\
-\texttt{pm2\_5\_rolling\_12h}          & 0.432 \\
 \bottomrule
 \end{tabular}
 \end{table}
-
-Figure~\ref{fig:shap_horizons} contrasts feature importance bar plots across the +1h, +24h, and +72h horizons, highlighting the progression from immediate air mass persistence to synoptic meteorological forcing.
 
 \begin{figure}[H]
 \centering
 \begin{subfigure}[b]{0.32\linewidth}
   \centering
   \includegraphics[width=\linewidth]{shap_importance_1h.png}
-  \caption{+1h Immediate Horizon}
+  \caption{+1h Immediate}
   \label{fig:shap_bar_1h}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.32\linewidth}
   \centering
   \includegraphics[width=\linewidth]{shap_importance_24h.png}
-  \caption{+24h Diurnal Horizon}
+  \caption{+24h Diurnal}
   \label{fig:shap_bar_24h}
 \end{subfigure}
 \hfill
 \begin{subfigure}[b]{0.32\linewidth}
   \centering
   \includegraphics[width=\linewidth]{shap_importance_72h.png}
-  \caption{+72h 3-Day Horizon}
+  \caption{+72h 3-Day}
   \label{fig:shap_bar_72h}
 \end{subfigure}
-\caption{SHAP feature importance bar charts across forecast horizons, color-coded by category: blue (AQI lags), green (rolling aggregates), orange (trends), purple (forecast weather and deltas).}
+\caption{SHAP feature importance across forecast horizons: blue (AQI lags), green (rolling aggregates), orange (trends), purple (forecast weather and deltas).}
 \label{fig:shap_horizons}
 \end{figure}
 
-\subsection{Summary Distribution and Directionality}
-
-Figure~\ref{fig:shap_summary_24h} displays the beeswarm summary plot for the +24h diurnal model.  High values of \texttt{forecast\_temp\_humidity\_24h} push AQI higher (secondary aerosol formation), whereas elevated sea-breeze wind vectors (\texttt{forecast\_wind\_u\_24h}) exert a negative SHAP impact (coastal dispersion).  Positive \texttt{month\_sin} values drive higher winter baseline predictions.
+\subsection{Directionality}
+Figure~\ref{fig:shap_summary_24h} shows how individual feature values push the +24h prediction up or down: warmer, more humid forecast conditions raise predicted AQI (favoring aerosol formation), stronger onshore wind lowers it (better dispersion), and winter months push the baseline higher.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.88\linewidth]{shap_summary_24h.png}
-\caption{SHAP beeswarm summary plot for the +24h diurnal model, showing feature value distributions and positive/negative impact directions.}
+\caption{SHAP beeswarm summary for the +24h diurnal model, showing feature value distributions and their positive/negative impact.}
 \label{fig:shap_summary_24h}
 \end{figure}
 
-\textbf{Target Leakage Verification}: Across all 6 models, zero raw pollutant features (\texttt{pm2\_5}, \texttt{pm10}, \texttt{ozone}) appear in the top rankings, confirming that the pipeline is strictly leakage-free.
+Across all six models, no raw (same-timestep) pollutant feature ever appears among the top drivers -- confirming the pipeline is genuinely leakage-free, not just leakage-free by design.
 
 
 % ══════════════════════════════════════════════════════════════════
 \section{System Architecture and Deployment}
 
-The production system is organized into four decoupled layers:
+The system is organized into four layers, all running on serverless, free-tier infrastructure with no servers to maintain:
 
-\subsection{Data and Ingestion Layer}
-\texttt{sources.py} queries the Open-Meteo archive and forecast endpoints, aligning meteorological and air quality records on standardized UTC hourly timestamps.
+\subsection{Ingestion}
+\texttt{sources.py} pulls from Open-Meteo's archive and forecast endpoints and aligns weather and air-quality records on UTC hourly timestamps.
 
-\subsection{Feature Store Layer}
-\texttt{hopsworks\_utils.py} connects to Hopsworks via environment credentials, handles feature group schemas, and inserts updates with exponential backoff.
+\subsection{Feature Store}
+Engineered features are registered in the \textbf{Hopsworks Feature Store} (Apache Hudi format), keyed and timestamped by \texttt{time}, which supports ACID upserts, time-travel queries, and reproducible dataset snapshots. \texttt{hopsworks\_utils.py} manages the connection, schema, and retries on transient network errors.
 
-\subsection{Inference and Serving Layer (Backend)}
-A \textbf{FastAPI} application (\texttt{api.py}) serves inference:
+\subsection{Inference (Backend)}
+A \textbf{FastAPI} app (\texttt{api.py}) exposes:
 \begin{itemize}
-  \item \texttt{/api/current}: Real-time AQI with EPA category, severity rating, and dominant pollutant.
-  \item \texttt{/api/forecast}: Direct multi-horizon forecasts up to +72h with hourly linear interpolation.
-  \item \texttt{/api/history}: 48-hour trailing observed measurements for context.
-  \item \texttt{/api/analytics}: Dynamic telemetry returning model benchmark metrics and SHAP importance for all 6 horizons.
+  \item \texttt{/api/current} -- live AQI, EPA category, and dominant pollutant.
+  \item \texttt{/api/forecast} -- the full +1h to +72h forecast, interpolated hourly.
+  \item \texttt{/api/history} -- the trailing 48 hours of observed data.
+  \item \texttt{/api/analytics} -- model metrics and SHAP importances for all horizons.
 \end{itemize}
-The backend is hosted on \textbf{FastAPI Cloud} with automatic continuous deployment on repository commits, accompanied by an in-memory 5-minute TTL cache to minimize external API overhead.
+It is hosted on \textbf{FastAPI Cloud} with automatic deployment on every commit, plus a 5-minute cache to limit calls to Open-Meteo.
 
-\subsection{User Interface (Dashboard)}
-The dashboard is built with \textbf{React}, \textbf{TypeScript}, \textbf{Vite}, and \textbf{Tailwind CSS v4}, visualizing forecasts via \textbf{Recharts}.  It includes an interactive multi-horizon explainability panel allowing users to inspect SHAP drivers across any horizon (+1h through +72h).  The frontend is hosted on \textbf{Vercel} with proxy rewrites to the FastAPI Cloud backend.
+\subsection{Dashboard (Frontend)}
+A \textbf{React + TypeScript} dashboard (Vite, Tailwind CSS, Recharts) visualizes forecasts and lets users explore SHAP drivers for any horizon. It is hosted on \textbf{Vercel}, which proxies API calls to the FastAPI backend.
 
 
 % ══════════════════════════════════════════════════════════════════
-\section{Continuous Integration and Pipeline Automation}
+\section{Automation}
 
-Automation is managed through \textbf{GitHub Actions} (\texttt{.github/workflows/pipelines.yml}):
+GitHub Actions drives the whole cycle end-to-end:
 \begin{itemize}
-  \item \textbf{Hourly Feature Pipeline}: Runs every hour at minute 0 (cron \texttt{0\ *\ *\ *\ *}), ingesting recent actuals and forecasts, computing engineered features, and upserting them to Hopsworks. Dependencies are isolated in \texttt{requirements-feature.txt} (excluding heavy ML libraries) to finish in under 2 minutes.
-  \item \textbf{Daily Training Pipeline}: Runs daily at 02:00 UTC (cron \texttt{0\ 2\ *\ *\ *}) following the feature update, retraining direct XGBoost and Random Forest models, updating metrics, and committing fresh artifacts to Git.
-  \item \textbf{Continuous Deployment}: Model artifact commits trigger automated backend image rebuilds on FastAPI Cloud, providing an autonomous retrain-and-deploy loop.
+  \item \textbf{Hourly feature pipeline} (\texttt{0\ *\ *\ *\ *}) -- ingests the latest data, recomputes features, and upserts them to Hopsworks in under 2 minutes; a lightweight dependency set keeps this fast.
+  \item \textbf{Daily training pipeline} (\texttt{0\ 2\ *\ *\ *}) -- retrains XGBoost and Random Forest, refreshes metrics, and commits new model artifacts.
+  \item \textbf{Continuous deployment} -- a new model commit automatically triggers a backend rebuild on FastAPI Cloud.
 \end{itemize}
-
-
-% ══════════════════════════════════════════════════════════════════
-\section{Architectural Trade-offs and Engineering Insights}
-
-\begin{enumerate}[label=\textbf{\arabic*.}]
-  \item \textbf{Direct Multi-Horizon vs.\ Autoregressive Chaining}: While recursive models require only a single training run, early prediction errors compound exponentially across 72 steps.  The direct approach requires managing six distinct models, but eliminates error propagation and enables horizon-specific feature pruning.
-
-  \item \textbf{Gradient Boosted Trees vs.\ Deep Sequence Models}: XGBoost demonstrated superior sample efficiency and accuracy over PyTorch LSTM across all horizons, achieving lower RMSE at a fraction of the computational footprint ($\sim$2 seconds vs.\ $\sim$45 minutes training time).  Tree-based architectures are well suited for tabular atmospheric features, whereas LSTMs require extensive sequence normalization and struggle with long-range multi-day tabular dependencies.
-
-  \item \textbf{Leakage Prevention vs.\ Feature Richness}: Eliminating instantaneous pollutant concentrations prevents trivial target leakage.  Retaining lagged derivatives and rolling windows enables the model to capture air mass history while enforcing strict physical causality.
-
-  \item \textbf{Serverless Cloud vs.\ Persistent Infrastructure}: Integrating Open-Meteo, Hopsworks, GitHub Actions, FastAPI Cloud, and Vercel delivers production-grade ML capability with zero fixed server hosting fees and minimal maintenance overhead.
-\end{enumerate}
+Together these close the loop: new data comes in, models retrain, and the latest version deploys -- all without manual intervention.
 
 
 % ══════════════════════════════════════════════════════════════════
@@ -505,23 +416,21 @@ Automation is managed through \textbf{GitHub Actions} (\texttt{.github/workflows
 
 \subsection{Current Limitations}
 \begin{itemize}
-  \item \textbf{Multi-Day Forecast Ceiling}: Beyond 24 hours, $R^2$ decreases to $0.13$--$0.20$.  Predicting mesoscale air quality 3 days ahead remains fundamentally bounded by localized emission uncertainties.
-  \item \textbf{Single-Location Scope}: The current deployment is optimized for Karachi.  Multi-city scaling requires spatial embeddings or regionalized feature groups.
-  \item \textbf{Static Hyperparameters}: Model hyperparameters were tuned via validation search but remain fixed.  Automated hyperparameter optimization (e.g., Optuna) in CI would enhance adaptability.
+  \item \textbf{3-day ceiling}: accuracy drops sharply beyond 24 hours ($R^2$ of 0.13--0.20), since mesoscale air quality depends on local emissions no weather model can predict.
+  \item \textbf{Karachi-only}: scaling to other cities will need spatial features or per-city feature groups.
+  \item \textbf{Fixed hyperparameters}: tuned once by hand rather than automatically retuned as new data arrives (e.g.\ via Optuna).
 \end{itemize}
 
-\subsection{Future Enhancements}
+\subsection{Planned Improvements}
 \begin{itemize}
-  \item Integration of satellite aerosol optical depth (AOD) observations from Copernicus/CAMS.
-  \item Conformal prediction intervals to output calibrated uncertainty bounds alongside point forecasts.
-  \item Automated push alert webhooks triggered when forecasted AQI crosses hazardous EPA thresholds.
+  \item Satellite aerosol optical depth (AOD) data from Copernicus/CAMS.
+  \item Calibrated uncertainty intervals via conformal prediction.
+  \item Automated alerts when the forecast crosses hazardous EPA thresholds.
 \end{itemize}
 
 
 % ══════════════════════════════════════════════════════════════════
-\section{Technology Stack Summary}
-
-Table~\ref{tab:tech_stack} lists the technology stack used across all project layers.
+\section{Technology Stack}
 
 \begin{table}[H]
 \centering
@@ -549,6 +458,6 @@ Explainability / EDA & SHAP, Matplotlib, Seaborn, statsmodels \\
 % ══════════════════════════════════════════════════════════════════
 \section{Conclusion}
 
-The Pearls AQI Predictor provides a robust, leakage-free, end-to-end machine learning system for 72-hour air quality forecasting in Karachi.  By pairing direct multi-horizon gradient boosted trees with Open-Meteo numerical weather forecasts and an automated serverless workflow, the system achieves strong accuracy at near-term horizons (RMSE 0.92 at +1h, 3.94 at +6h) and actionable diurnal guidance at +24h (RMSE 9.41, $R^2 = 0.511$).  Comprehensive SHAP explainability across all six forecast horizons confirms that the models transition logically from autoregressive inertia to synoptic meteorological forcing, offering transparent and physically grounded intelligence for public health decision-making.
+Pearls AQI Predictor shows that a fully serverless, free-tier pipeline can deliver genuinely useful multi-day air-quality forecasts for Karachi -- near-perfect one hour out, and still actionable a full day ahead. Pairing horizon-specific gradient-boosted trees with real weather forecasts, rather than one model recursively predicting itself forward, avoids compounding errors and lets each model focus on what matters most at its range. SHAP confirms the story makes physical sense: predictions lean on recent AQI history in the short term and on forecasted weather and seasonality further out, with no shortcuts anywhere in the pipeline.
 
 \end{document}
